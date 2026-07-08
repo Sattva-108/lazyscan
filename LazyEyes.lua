@@ -179,18 +179,7 @@ end
 -- TOOLTIP MATCH
 -- =============================================
 local function IsMatch()
-    local numLines = GameTooltip:NumLines()
-    if numLines > 0 then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff8800LazyEyes DEBUG:|r Tooltip has " .. numLines .. " lines")
-        -- Show first 3 lines of tooltip
-        for i = 1, math.min(numLines, 3) do
-            local lineObj = _G["GameTooltipTextLeft" .. i]
-            if lineObj and lineObj:GetText() then
-                DEFAULT_CHAT_FRAME:AddMessage("|cffff8800LazyEyes DEBUG:|r Line " .. i .. ": '" .. lineObj:GetText() .. "'")
-            end
-        end
-    end
-    for i = 1, numLines do
+    for i = 1, GameTooltip:NumLines() do
         local lineObj = _G["GameTooltipTextLeft" .. i]
         if lineObj then
             local lineText = lineObj:GetText()
@@ -313,7 +302,6 @@ local function ScanUpdate(self, elapsed)
         end
 
         -- Frame 3+: check tooltip text
-        DEFAULT_CHAT_FRAME:AddMessage("|cffff8800LazyEyes DEBUG:|r Checking tooltip, lines=" .. GameTooltip:NumLines() .. ", shown=" .. tostring(GameTooltip:IsShown()) .. ", alpha=" .. GameTooltip:GetAlpha())
         if IsMatch() then
             -- Node found! Flash + sound
             if LazyEyes.saveData.settings.flashScreen then FlashScreen() end
@@ -374,7 +362,6 @@ mainFrame:RegisterEvent("PLAYER_LOGOUT")
 function LazyEyes_StartScanning()
     if not LazyEyes.saveData then return false end
     trackingList = LazyEyes_BuildTrackingList()
-    DEFAULT_CHAT_FRAME:AddMessage("|cffff8800LazyEyes DEBUG:|r Tracking list has " .. #trackingList .. " nodes")
     LazyEyes_SwitchState("WAITING")
     mainFrame:SetScript("OnUpdate", ScanUpdate)
     LazyEyes.isActive = true
