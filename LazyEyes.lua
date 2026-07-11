@@ -374,11 +374,12 @@ local function ScanUpdate(self, elapsed)
     -- Skip during flight path
     if UnitOnTaxi and UnitOnTaxi("player") then return end
 
-    -- Check tracking every 60 seconds
+    -- Check tracking and zoom every 60 seconds
     trackingCheckTimer = trackingCheckTimer + elapsed
     if trackingCheckTimer >= 60 then
         trackingCheckTimer = 0
         CheckTrackingWarning()
+        Minimap:SetZoom(0)
     end
 
     if scanState == "WAITING" then
@@ -548,6 +549,7 @@ function LazyEyes_StartScanning()
     mainFrame:SetScript("OnUpdate", ScanUpdate)
     LazyEyes.isActive = true
     trackingCheckTimer = 0
+    Minimap:SetZoom(0)
     -- Update HUD button
     if LazyEyes_GUI_HUD_UpdateButton then
         LazyEyes_GUI_HUD_UpdateButton(true)
