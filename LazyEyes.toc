@@ -5,6 +5,10 @@
 ## Version: 1.0
 ## SavedVariables: LazyEyesSavedVars
 
+Libs\LibStub\LibStub.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
 DefaultSettings.lua
 MiningData.lua
 GUI.lua
