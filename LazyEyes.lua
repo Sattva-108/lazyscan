@@ -452,10 +452,25 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                                 else
                                     LazyEyes_StartScanning()
                                 end
+                                DBI:Refresh("LazyEyes")
+                                -- Force tooltip update if visible
+                                local icon = DBI.objects and DBI.objects["LazyEyes"]
+                                if icon then
+                                    if icon:IsMouseOver() then
+                                        icon:GetScript("OnEnter")(icon)
+                                    elseif GameTooltip:IsOwned(icon) then
+                                        minimapIcon.OnTooltipShow(GameTooltip)
+                                    end
+                                end
                             end
                         end,
                         OnTooltipShow = function(tooltip)
                             tooltip:AddLine("|cff00ff00LazyEyes Mining|r")
+                            if LazyEyes.isActive then
+                                tooltip:AddLine("|cff00ff00Scan Active|r")
+                            else
+                                tooltip:AddLine("|cffff2020Scan Disabled|r")
+                            end
                             tooltip:AddLine(" ")
                             tooltip:AddLine("|cff00ccffLeft-click|r: Open settings")
                             tooltip:AddLine("|cff00ccffRight-click|r: Toggle scan")
@@ -510,7 +525,7 @@ function LazyEyes_StartScanning()
     if LazyEyes_GUI_HUD_UpdateButton then
         LazyEyes_GUI_HUD_UpdateButton(true)
     end
-    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00LazyEyes:|r Scanning started.")
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00LazyEyes:|r |cff00ff00Scanning started.|r")
     return true
 end
 
@@ -522,7 +537,7 @@ function LazyEyes_StopScanning()
     if LazyEyes_GUI_HUD_UpdateButton then
         LazyEyes_GUI_HUD_UpdateButton(false)
     end
-    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00LazyEyes:|r Scanning stopped.")
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00LazyEyes:|r |cffff2020Scanning stopped.|r")
 end
 
 -- =============================================
