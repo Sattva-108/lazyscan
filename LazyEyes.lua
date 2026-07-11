@@ -431,6 +431,39 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             if LazyEyes_GUI_Init then
                 LazyEyes_GUI_Init()
             end
+
+            -- Minimap button via LibDBIcon
+            if LibStub then
+                local LDB = LibStub("LibDataBroker-1.1", true)
+                local DBI = LibStub("LibDBIcon-1.0", true)
+                if LDB and DBI then
+                    local minimapIcon = LDB:NewDataObject("LazyEyes", {
+                        type = "data source",
+                        text = "LazyEyes",
+                        icon = "Interface\\Icons\\INV_Ore_Iron_01",
+                        OnClick = function(self, button)
+                            if button == "LeftButton" then
+                                if LazyEyes_GUI_Options_Toggle then
+                                    LazyEyes_GUI_Options_Toggle()
+                                end
+                            elseif button == "RightButton" then
+                                if LazyEyes.isActive then
+                                    LazyEyes_StopScanning()
+                                else
+                                    LazyEyes_StartScanning()
+                                end
+                            end
+                        end,
+                        OnTooltipShow = function(tooltip)
+                            tooltip:AddLine("|cff00ff00LazyEyes Mining|r")
+                            tooltip:AddLine(" ")
+                            tooltip:AddLine("|cff00ccffLeft-click|r: Open settings")
+                            tooltip:AddLine("|cff00ccffRight-click|r: Toggle scan")
+                        end,
+                    })
+                    DBI:Register("LazyEyes", minimapIcon, LazyEyes.saveData.settings)
+                end
+            end
             
             DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00LazyEyes Mining|r v1.0 loaded! Type |cff00ccff/leye|r to toggle.")
         end
