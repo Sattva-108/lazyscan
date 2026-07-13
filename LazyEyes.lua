@@ -626,7 +626,15 @@ end
 -- =============================================
 BINDING_HEADER_LAZYEYES = "LazyEyes"
 BINDING_NAME_LAZYEYES_TOGGLE = "Toggle Mining Scanner"
+
 _G["SLASH_LAZYEYES1"] = "/leye"
+SlashCmdList["LAZYEYES"] = function(msg)
+    if LazyEyes.isActive then
+        LazyEyes_StopScanning()
+    else
+        LazyEyes_StartScanning()
+    end
+end
 
 -- =============================================
 -- CHAT HYPERLINK HANDLER

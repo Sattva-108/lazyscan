@@ -407,29 +407,83 @@ function LazyEyes_GUI_ScanTab_Create(parent)
     y = y - 24
 
     local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    btn:SetSize(130, 22); btn:SetPoint("TOP", frame, "TOP", -65, y); btn:SetText("Set Keybind")
+    btn:SetSize(160, 22); btn:SetPoint("TOP", frame, "TOP", 0, y)
 
-    local function CancelBind()
-        btn:SetText("Set Keybind"); btn:UnlockHighlight(); btn.buttonPressed = nil; btn:SetScript("OnKeyDown", nil)
+    local ignoreKeys = {
+        ["BUTTON1"] = true, ["BUTTON2"] = true, ["UNKNOWN"] = true,
+        ["LSHIFT"] = true, ["LCTRL"] = true, ["LALT"] = true,
+        ["RSHIFT"] = true, ["RCTRL"] = true, ["RALT"] = true,
+    }
+
+    local function UpdateBindText()
+        local key = GetBindingKey("LAZYEYES_TOGGLE")
+        if key and key ~= "" then
+            btn:SetText(GetBindingText(key, "KEY_"))
+        else
+            btn:SetText("Set Keybind")
+        end
     end
 
-    btn:SetScript("OnClick", function(self, button)
-        if button == "LeftButton" and not IsShiftKeyDown() and not IsControlKeyDown() and not IsAltKeyDown() then
-            if self.buttonPressed then CancelBind()
-            else
-                self:LockHighlight(); self.buttonPressed = 1; self:SetText("Press a key...")
-                self:SetScript("OnKeyDown", function(_, key)
-                    if key == "UNKNOWN" then return end
-                    if key == "LSHIFT" or key == "RSHIFT" or key == "LCTRL" or key == "RCTRL" or key == "LALT" or key == "RALT" then return end
-                    if key == "ESCAPE" then CancelBind(); return end
-                    SetBinding(key, "LAZYEYES_TOGGLE", GetCurrentBindingSet())
-                    SaveBindings(GetCurrentBindingSet())
-                    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00LazyEyes:|r Bound to |cff00ccff" .. GetBindingText(key, "KEY_") .. "|r")
-                    CancelBind()
-                end)
+    local function CancelBind()
+        btn:UnlockHighlight()
+        btn.waitingForKey = nil
+        btn:EnableKeyboard(false)
+        UpdateBindText()
+    end
+
+    btn:SetScript("OnKeyDown", function(self, key)
+        if not self.waitingForKey then return end
+        if key == "UNKNOWN" or ignoreKeys[key] then return end
+
+        local keyPressed = key
+        if keyPressed == "ESCAPE" then
+            keyPressed = ""
+        else
+            if IsShiftKeyDown() then keyPressed = "SHIFT-" .. keyPressed end
+            if IsControlKeyDown() then keyPressed = "CTRL-" .. keyPressed end
+            if IsAltKeyDown() then keyPressed = "ALT-" .. keyPressed end
+        end
+
+        self:EnableKeyboard(false)
+        self.waitingForKey = nil
+        self:UnlockHighlight()
+
+        if keyPressed == "" then
+            local bound = GetBindingKey("LAZYEYES_TOGGLE")
+            if bound then SetBinding(bound) end
+        else
+            local oldAction = GetBindingAction(keyPressed)
+            if oldAction ~= "" and oldAction ~= "LAZYEYES_TOGGLE" then
+                DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00LazyEyes:|r Key was bound to " .. GetBindingText(oldAction, "BINDING_NAME_"))
             end
+            SetBinding(keyPressed, "LAZYEYES_TOGGLE")
+        end
+        SaveBindings(GetCurrentBindingSet())
+        UpdateBindText()
+    end)
+
+    btn:SetScript("OnMouseDown", function(self, button)
+        if not self.waitingForKey then return end
+        if button == "LeftButton" or button == "RightButton" then return end
+        local key = button
+        if key == "MiddleButton" then key = "BUTTON3" end
+        self:SetScript("OnKeyDown", self:GetScript("OnKeyDown"))
+        self:GetScript("OnKeyDown")(self, key)
+    end)
+
+    btn:SetScript("OnClick", function(self, button)
+        if button ~= "LeftButton" then return end
+        if self.waitingForKey then
+            CancelBind()
+        else
+            self.waitingForKey = true
+            self:EnableKeyboard(true)
+            self:LockHighlight()
+            self:SetText("Press a key...")
         end
     end)
+
+    UpdateBindText()
 
     y = y - 28
     local sh = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
