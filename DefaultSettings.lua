@@ -12,8 +12,8 @@ function LazyEyes_GetDefaultSettings()
         restartDelay = 5,
         autoStartScan = true,
         zoomMinimap = true,
-        trackingSound = 1,
-        trackingSoundID = 8959,
+        trackingSound = 5,
+        trackingSoundID = 12867,
         
         -- GUI settings
         flashColor = { r = 0, g = 1, b = 0, a = 0.5 },
@@ -44,4 +44,5 @@ LazyEyes_WarningSounds = {
     { name = "Ready Check", id = 8960 },
     { name = "PvP Flag", id = 8174 },
     { name = "Spell Hurt", id = 847 },
+    { name = "Warning (Default)", id = 12867 },
 }
