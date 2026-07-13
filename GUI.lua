@@ -628,11 +628,13 @@ local function AbbreviateName(name, maxLen)
     return table.concat(result2, " ")
 end
 
-local function GetSkillColor(skill)
-    if skill <= 75 then return 0.9, 0.6, 0.2 end    -- orange
-    if skill <= 150 then return 0.9, 0.9, 0.0 end   -- yellow
-    if skill <= 225 then return 0.1, 0.9, 0.1 end   -- green
-    return 0.5, 0.5, 0.5                            -- gray
+local function GetSkillColor(nodeSkill)
+    local playerSkill = LazyEyes_GetMiningSkill() or 0
+    if playerSkill < nodeSkill       then return 1.0, 0.1, 0.1 end  -- red: can't mine yet
+    if playerSkill < nodeSkill + 25  then return 0.9, 0.6, 0.2 end  -- orange: challenging
+    if playerSkill < nodeSkill + 50  then return 0.9, 0.9, 0.0 end  -- yellow: moderate
+    if playerSkill < nodeSkill + 100 then return 0.1, 0.9, 0.1 end  -- green: easy
+    return 0.5, 0.5, 0.5                                            -- gray: trivial
 end
 
 local function BuildNodeList(data, category, parentFrame, allPills, scrollChild, yOffset)
