@@ -637,9 +637,10 @@ local function AbbreviateName(name, maxLen)
     return table.concat(result2, " ")
 end
 
-local function GetSkillColor(nodeSkill)
-    local playerSkill = lazyscan_GetMiningSkill() or 0
-    if playerSkill < nodeSkill       then return 1.0, 0.1, 0.1 end  -- red: can't mine yet
+local function GetSkillColor(nodeSkill, profession)
+    local getSkill = (profession == "herbs") and lazyscan_GetHerbalismSkill or lazyscan_GetMiningSkill
+    local playerSkill = getSkill() or 0
+    if playerSkill < nodeSkill       then return 1.0, 0.1, 0.1 end  -- red: can't gather yet
     if playerSkill < nodeSkill + 25  then return 0.9, 0.6, 0.2 end  -- orange: challenging
     if playerSkill < nodeSkill + 50  then return 0.9, 0.9, 0.0 end  -- yellow: moderate
     if playerSkill < nodeSkill + 100 then return 0.1, 0.9, 0.1 end  -- green: easy
@@ -683,7 +684,7 @@ local function BuildNodeList(data, category, parentFrame, allPills, scrollChild,
             lazyscan_GUI.nodeHovered = true
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(GetNodeDisplayName(node), 1, 0.82, 0)
-            GameTooltip:AddLine("Skill: " .. node.skill, GetSkillColor(node.skill))
+            GameTooltip:AddLine("Skill: " .. node.skill, GetSkillColor(node.skill, category))
             GameTooltip:Show()
             self:SetBackdropColor(self.isOn and 0.22 or 0.32, self.isOn and 0.42 or 0.32, self.isOn and 0.18 or 0.32, 0.95)
         end)
