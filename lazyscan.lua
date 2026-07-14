@@ -489,6 +489,10 @@ local function ScanUpdate(self, elapsed)
         timeElapsed = timeElapsed + elapsed
         local interval = 0.00001
         local inCombat = lazyscan.saveData.settings.pauseInCombat and UnitAffectingCombat("player") and not IsMounted()
+        -- Clear mouseover pause if no unit under cursor (handles UI frames where CURSOR_UPDATE doesn't fire)
+        if mouseoverUnitPause and not UnitExists("mouseover") then
+            mouseoverUnitPause = false
+        end
         if timeElapsed >= interval and not IsMouselooking() and not IsMouseButtonDown(1) and not inCombat and not CursorBusy() and not mouseoverUnitPause then
             lazyscan_SwitchState("REPOSITION_MINIMAP")
         end
