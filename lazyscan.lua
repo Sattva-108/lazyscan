@@ -168,7 +168,7 @@ local minimapMoveTime = 0
 -- OnUpdate frame to detect button state (bypasses frame event capture)
 local mouseReleaseFrame = CreateFrame("Frame")
 mouseReleaseFrame:SetScript("OnUpdate", function()
-    if not lazyscan.isActive or (UnitAffectingCombat and UnitAffectingCombat("player")) then
+    if not lazyscan.isActive or ((UnitAffectingCombat and UnitAffectingCombat("player")) and not IsMounted()) then
         if mouselookActive then
             if IsMouselooking() then MouselookStop() end
             mouselookActive = false
@@ -206,7 +206,7 @@ local function HookMinimap()
     local origOnMouseUp = Minimap:GetScript("OnMouseUp")
 
     Minimap:SetScript("OnMouseDown", function(self, button)
-        local inCombat = UnitAffectingCombat and UnitAffectingCombat("player")
+        local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) and not IsMounted()
         if lazyscan.isActive and not inCombat and button == "RightButton" and Minimap:GetScale() < 0.5 then
             return
         end
@@ -214,7 +214,7 @@ local function HookMinimap()
     end)
 
     Minimap:SetScript("OnMouseUp", function(self, button)
-        local inCombat = UnitAffectingCombat and UnitAffectingCombat("player")
+        local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) and not IsMounted()
         if lazyscan.isActive and not inCombat and button == "RightButton" and Minimap:GetScale() < 0.5 then
             return
         end
@@ -488,7 +488,7 @@ local function ScanUpdate(self, elapsed)
     if scanState == "WAITING" then
         timeElapsed = timeElapsed + elapsed
         local interval = 0.00001
-        local inCombat = lazyscan.saveData.settings.pauseInCombat and UnitAffectingCombat("player")
+        local inCombat = lazyscan.saveData.settings.pauseInCombat and UnitAffectingCombat("player") and not IsMounted()
         if timeElapsed >= interval and not IsMouselooking() and not IsMouseButtonDown(1) and not inCombat and not CursorBusy() and not mouseoverUnitPause then
             lazyscan_SwitchState("REPOSITION_MINIMAP")
         end
