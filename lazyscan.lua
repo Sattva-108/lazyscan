@@ -210,6 +210,33 @@ local function StoreMinimap()
             minimapSettings.childMouseState[child] = true
         end
     end
+
+    -- Detect all frames anchored to Minimap or MinimapCluster (from UIParent)
+    -- These frames follow their anchor when it moves — we need to detach them during scan
+    minimapSettings.anchoredFrames = {}
+    local function scanParent(parent)
+        if not parent then return end
+        for i = 1, select("#", parent:GetChildren()) do
+            local child = select(i, parent:GetChildren())
+            if child then
+                for j = 1, child:GetNumPoints() do
+                    local pt, relTo, rp, xOff, yOff = child:GetPoint(j)
+                    if relTo == Minimap or relTo == MinimapCluster then
+                        minimapSettings.anchoredFrames[#minimapSettings.anchoredFrames + 1] = {
+                            frame = child,
+                            -- Original anchor for restore
+                            point = pt,
+                            relativeTo = relTo,
+                            relativePoint = rp,
+                            x = xOff,
+                            y = yOff,
+                        }
+                    end
+                end
+            end
+        end
+    end
+    scanParent(UIParent)
 end
 
 local function RestoreMinimap()
@@ -228,6 +255,23 @@ local function RestoreMinimap()
     if m.childMouseState then
         for child, was in pairs(m.childMouseState) do
             if child and child.EnableMouse and was then child:EnableMouse(true) end
+        end
+    end
+
+    -- Restore original anchors and SetPoint methods for frames we detached
+    if m.anchoredFrames then
+        for _, info in ipairs(m.anchoredFrames) do
+            local f = info.frame
+            -- Restore original SetPoint method
+            if f and info.origSetPoint then
+                f.SetPoint = info.origSetPoint
+                info.origSetPoint = nil
+            end
+            -- Restore original anchor
+            if f and f.ClearAllPoints and f.SetPoint then
+                f:ClearAllPoints()
+                f:SetPoint(info.point, info.relativeTo, info.relativePoint, info.x, info.y)
+            end
         end
     end
 
@@ -257,6 +301,38 @@ local function PrepareMinimap()
     for i = 1, select("#", Minimap:GetChildren()) do
         local child = select(i, Minimap:GetChildren())
         if child and child.EnableMouse then child:EnableMouse(false) end
+    end
+
+    -- For each frame anchored to Minimap/MinimapCluster:
+    -- 1. Hook SetPoint to block re-anchoring to Minimap during scan
+    -- 2. Re-anchor to absolute position so it stays visually in place
+    if minimapSettings.anchoredFrames then
+        for _, info in ipairs(minimapSettings.anchoredFrames) do
+            local f = info.frame
+            if f then
+                -- Hook SetPoint: block any re-anchoring to Minimap while scanning
+                if not info.origSetPoint then
+                    info.origSetPoint = f.SetPoint
+                end
+                local origSP = info.origSetPoint
+                f.SetPoint = function(self, point, relTo, relPoint, x, y)
+                    if isScanning and relTo == Minimap then
+                        return
+                    end
+                    return origSP(self, point, relTo, relPoint, x, y)
+                end
+
+                -- Re-anchor to absolute position
+                if f.ClearAllPoints and f.GetLeft and f.GetBottom then
+                    local left = f:GetLeft()
+                    local bottom = f:GetBottom()
+                    if left and bottom then
+                        f:ClearAllPoints()
+                        f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
+                    end
+                end
+            end
+        end
     end
 end
 
