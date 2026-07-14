@@ -20,6 +20,7 @@ local isScanning = false
 local hideTooltip = false
 local trackingList = {}
 local trackingCheckTimer = 0
+local mouseoverUnitPause = false
 
 local function HasActiveTracking()
     local currentTexture = GetTrackingTexture()
@@ -228,6 +229,31 @@ hookFrame:SetScript("OnEvent", function(self, event)
     self:UnregisterEvent("PLAYER_LOGIN")
     HookMinimap()
 end)
+
+-- =============================================
+-- UNIT MOUSEOVER PAUSE (prevent scan from blocking targeting)
+-- =============================================
+local unitEventFrame = CreateFrame("Frame")
+unitEventFrame:SetScript("OnEvent", function(self, event, ...)
+    if event == "UPDATE_MOUSEOVER_UNIT" then
+        mouseoverUnitPause = true
+    elseif event == "CURSOR_UPDATE" or event == "UNIT_TARGET" then
+        mouseoverUnitPause = false
+    end
+end)
+
+local function RegisterUnitEvents()
+    unitEventFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+    unitEventFrame:RegisterEvent("CURSOR_UPDATE")
+    unitEventFrame:RegisterEvent("UNIT_TARGET")
+end
+
+local function UnregisterUnitEvents()
+    unitEventFrame:UnregisterEvent("UPDATE_MOUSEOVER_UNIT")
+    unitEventFrame:UnregisterEvent("CURSOR_UPDATE")
+    unitEventFrame:UnregisterEvent("UNIT_TARGET")
+    mouseoverUnitPause = false
+end
 
 -- =============================================
 -- MINIMAP STORAGE / RESTORE
@@ -463,7 +489,7 @@ local function ScanUpdate(self, elapsed)
         timeElapsed = timeElapsed + elapsed
         local interval = 0.00001
         local inCombat = lazyscan.saveData.settings.pauseInCombat and UnitAffectingCombat("player")
-        if timeElapsed >= interval and not IsMouselooking() and not IsMouseButtonDown(1) and not inCombat and not CursorBusy() then
+        if timeElapsed >= interval and not IsMouselooking() and not IsMouseButtonDown(1) and not inCombat and not CursorBusy() and not mouseoverUnitPause then
             lazyscan_SwitchState("REPOSITION_MINIMAP")
         end
 
@@ -627,6 +653,7 @@ function lazyscan_StartScanning()
     lazyscan_SwitchState("WAITING")
     mainFrame:SetScript("OnUpdate", ScanUpdate)
     lazyscan.isActive = true
+    RegisterUnitEvents()
     trackingCheckTimer = 0
     if lazyscan.saveData.settings.zoomMinimap then Minimap:SetZoom(0) end
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r |cff00ff00Scanning started.|r")
@@ -637,6 +664,7 @@ function lazyscan_StopScanning()
     lazyscan_SwitchState("DISABLED")
     mainFrame:SetScript("OnUpdate", nil)
     lazyscan.isActive = false
+    UnregisterUnitEvents()
     lazyscan._ignoreTrackingWarning = nil
     lazyscan._ignoreTrackingWarning = false
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r |cffff2020Scanning stopped.|r")
