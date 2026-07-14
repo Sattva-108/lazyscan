@@ -212,8 +212,7 @@ local function StoreMinimap()
         end
     end
 
-    -- Detect frames anchored to Minimap or MinimapCluster (direct UIParent children)
-    -- Cache the result — these frames don't change during gameplay
+    -- Detect frames anchored to Minimap/MinimapCluster (cached, one-time)
     if not anchoredFramesCache then
         anchoredFramesCache = {}
         for i = 1, select("#", UIParent:GetChildren()) do
@@ -222,7 +221,10 @@ local function StoreMinimap()
                 for j = 1, child:GetNumPoints() do
                     local _, relTo = child:GetPoint(j)
                     if relTo == Minimap or relTo == MinimapCluster then
-                        anchoredFramesCache[#anchoredFramesCache + 1] = child
+                        anchoredFramesCache[#anchoredFramesCache + 1] = {
+                            frame = child,
+                            alpha = child.GetAlpha and child:GetAlpha() or 1,
+                        }
                     end
                 end
             end
@@ -252,8 +254,9 @@ local function RestoreMinimap()
 
     -- Restore alpha for frames we hid during scan
     if m.anchoredFrames then
-        for _, f in ipairs(m.anchoredFrames) do
-            if f and f.SetAlpha then f:SetAlpha(1) end
+        for _, info in ipairs(m.anchoredFrames) do
+            local f = info.frame
+            if f and f.SetAlpha then f:SetAlpha(info.alpha) end
         end
     end
 
@@ -287,7 +290,8 @@ local function PrepareMinimap()
 
     -- Hide frames anchored to Minimap/MinimapCluster so they don't flicker on cursor
     if minimapSettings.anchoredFrames then
-        for _, f in ipairs(minimapSettings.anchoredFrames) do
+        for _, info in ipairs(minimapSettings.anchoredFrames) do
+            local f = info.frame
             if f and f.SetAlpha then f:SetAlpha(0) end
         end
     end
@@ -412,7 +416,7 @@ local function ScanUpdate(self, elapsed)
 
     if scanState == "WAITING" then
         timeElapsed = timeElapsed + elapsed
-        local interval = 0.5
+        local interval = 0.00001
         local inCombat = lazyscan.saveData.settings.pauseInCombat and UnitAffectingCombat("player")
         if timeElapsed >= interval and not IsMouselooking() and not IsMouseButtonDown(1) and not inCombat and not CursorBusy() then
             lazyscan_SwitchState("REPOSITION_MINIMAP")
