@@ -329,6 +329,7 @@ local function RestoreMinimap()
     end
 
     Minimap:EnableMouse(true)
+    Minimap:EnableMouseWheel(true)
     clickFrame:Hide()
 end
 
@@ -349,6 +350,7 @@ local function PrepareMinimap()
 
     Minimap:SetAlpha(0)
     Minimap:SetScale(0.15)
+    Minimap:EnableMouseWheel(false)
 
     -- Disable mouse on minimap children to prevent POI tooltips
     -- Minimap itself stays mouse-enabled so tooltip appears for node detection
