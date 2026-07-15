@@ -643,7 +643,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         if lazyscan.saveData and lazyscan.saveData.settings.autoStartScan and not lazyscan.isActive then
-            lazyscan_StartScanning()
+            lazyscan_StartScanning(true)
         end
 
     elseif event == "PLAYER_LOGOUT" then
@@ -658,7 +658,7 @@ mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- =============================================
 -- START / STOP
 -- =============================================
-function lazyscan_StartScanning()
+function lazyscan_StartScanning(silent)
     if not lazyscan.saveData then return false end
 
     -- Reset anchored frames cache so new frames added by other addons
@@ -666,6 +666,16 @@ function lazyscan_StartScanning()
     anchoredFramesCache = nil
 
     trackingList = lazyscan_BuildTrackingList()
+
+    -- Check if player has Mining or Herbalism profession
+    local hasMining = lazyscan_GetMiningSkill and lazyscan_GetMiningSkill()
+    local hasHerbalism = lazyscan_GetHerbalismSkill and lazyscan_GetHerbalismSkill()
+    if not hasMining and not hasHerbalism then
+        if not silent then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r You need Mining or Herbalism to scan.")
+        end
+        return false
+    end
 
     -- Check if Find Minerals or Find Herbs tracking is active
     if not HasActiveTracking() and not lazyscan._ignoreTrackingWarning then
