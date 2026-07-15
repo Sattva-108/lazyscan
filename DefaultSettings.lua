@@ -12,6 +12,7 @@ function lazyscan_GetDefaultSettings()
         restartDelay = 5,
         autoStartScan = true,
         zoomMinimap = true,
+        detectHighLevelNodes = false,
         trackingSound = 5,
         trackingSoundID = 12867,
 

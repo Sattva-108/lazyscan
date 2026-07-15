@@ -166,6 +166,7 @@ function lazyscan_BuildTrackingList()
             en = enName,
             ru = info.ru or enName,
             cat = "ores",
+            skillRequired = info.skillRequired or 0,
         })
     end
     if lazyscan_HerbalismData then
@@ -174,6 +175,7 @@ function lazyscan_BuildTrackingList()
                 en = enName,
                 ru = info.ru or enName,
                 cat = "herbs",
+                skillRequired = info.skillRequired or 0,
             })
         end
     end

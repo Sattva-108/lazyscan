@@ -322,6 +322,17 @@ function lazyscan_GUI_ScanTab_Create(parent)
     zoomCb:SetScript("OnLeave", function() GameTooltip:Hide() end)
     y = y - 32
 
+    local highLevelCb = MakeCheckbox(frame, "Detect high level nodes", lazyscan_GUI_GetSetting("detectHighLevelNodes", false), function(v) lazyscan_GUI_SetSetting("detectHighLevelNodes", v) end)
+    highLevelCb:SetPoint("TOP", frame, "TOP", -80, y)
+    highLevelCb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Detect high level nodes", 1, 0.82, 0)
+        GameTooltip:AddLine("When enabled, alerts for nodes you can't gather yet (skill too low). When disabled, only alerts for nodes you can actually gather.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    highLevelCb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    y = y - 32
+
     local kh = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     kh:SetPoint("TOP", frame, "TOP", 0, y); kh:SetText("Keybinding"); kh:SetTextColor(1, 0.82, 0)
     y = y - 24

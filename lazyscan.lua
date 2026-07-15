@@ -422,8 +422,16 @@ local function IsMatch()
                         -- Only match nodes for active tracking type
                         local activeTrack = GetActiveTrackingType()
                         if activeTrack and node.cat == activeTrack then
+                            -- Check skill level: skip high-level nodes unless enabled
+                            if not lazyscan.saveData.settings.detectHighLevelNodes then
+                                local getSkill = (node.cat == "herbs") and lazyscan_GetHerbalismSkill or lazyscan_GetMiningSkill
+                                local playerSkill = getSkill and getSkill() or 0
+                                if playerSkill < (node.skillRequired or 0) then
+                                    matched = false
+                                end
+                            end
                             -- Check if this node is enabled in GUI
-                            if lazyscan_GUI_IsNodeEnabled(node.cat, node.en) then
+                            if matched and lazyscan_GUI_IsNodeEnabled(node.cat, node.en) then
                                 foundNodeName = matchedName
                                 return true
                             end
