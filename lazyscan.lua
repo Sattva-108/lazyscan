@@ -653,6 +653,11 @@ mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- =============================================
 function lazyscan_StartScanning()
     if not lazyscan.saveData then return false end
+
+    -- Reset anchored frames cache so new frames added by other addons
+    -- (e.g. mail icon, LFG icon) are picked up on next PrepareMinimap call
+    anchoredFramesCache = nil
+
     trackingList = lazyscan_BuildTrackingList()
 
     -- Check if Find Minerals or Find Herbs tracking is active
