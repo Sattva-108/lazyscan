@@ -319,9 +319,6 @@ end
 local function RestoreMinimap()
     isScanning = false
     hideTooltip = false
-    if WorldFrame and not (UnitAffectingCombat and UnitAffectingCombat("player")) then
-        WorldFrame:EnableMouse(true)
-    end
 
     local m = minimapSettings
     if m.alpha then Minimap:SetAlpha(m.alpha) end
