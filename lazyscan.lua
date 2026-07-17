@@ -19,6 +19,7 @@ local anchoredFramesCache = nil
 local isScanning = false
 local hideTooltip = false
 local trackingList = {}
+local scanTarget = nil  -- Minimap or FarmModeMap, set once at scan start
 local trackingCheckTimer = 0
 local mouseoverUnitPause = false
 
@@ -152,7 +153,8 @@ local clickFrameWatchdog = CreateFrame("Frame")
 clickFrameWatchdog:SetScript("OnUpdate", function()
     if clickFrame:IsShown() then
         local focus = GetMouseFocus()
-        local overUI = focus and focus ~= WorldFrame and focus ~= Minimap and focus ~= clickFrame
+        local mm = scanTarget or Minimap
+        local overUI = focus and focus ~= WorldFrame and focus ~= mm and focus ~= clickFrame
         if overUI then
             clickFrame:Hide()
         end
@@ -178,10 +180,11 @@ mouseReleaseFrame:SetScript("OnUpdate", function()
         return
     end
     local rightDown = IsMouseButtonDown("RightButton")
+    local mm = scanTarget or Minimap
     if rightDown and not mouselookActive and not IsMouselooking() then
         local focus = GetMouseFocus()
         -- Only allow mouselook over WorldFrame or Minimap (never over UI elements)
-        local safeToStart = not focus or focus == WorldFrame or focus == Minimap
+        local safeToStart = not focus or focus == WorldFrame or focus == mm
         if safeToStart then
             mouselookActive = true
             MouselookStart()
@@ -193,7 +196,7 @@ mouseReleaseFrame:SetScript("OnUpdate", function()
     -- Stop mouselook if cursor moves over a UI element while it's active
     if mouselookActive then
         local focus = GetMouseFocus()
-        if focus and focus ~= WorldFrame and focus ~= Minimap then
+        if focus and focus ~= WorldFrame and focus ~= mm then
             if IsMouselooking() then MouselookStop() end
             mouselookActive = false
         end
@@ -204,26 +207,34 @@ local function HookMinimap()
     if hookedMinimap then return end
     hookedMinimap = true
 
-    local origOnMouseDown = Minimap:GetScript("OnMouseDown")
-    local origOnMouseUp = Minimap:GetScript("OnMouseUp")
+    local function hookFrame(frame)
+        if not frame or frame._lazyscanHooked then return end
+        frame._lazyscanHooked = true
 
-    Minimap:SetScript("OnMouseDown", function(self, button)
-        if not self:IsMouseOver() then return end
-        local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) and not IsMounted()
-        if lazyscan.isActive and not inCombat and button == "RightButton" and Minimap:GetScale() < 0.5 then
-            return
-        end
-        if origOnMouseDown then return origOnMouseDown(self, button) end
-    end)
+        local origDown = frame:GetScript("OnMouseDown")
+        local origUp = frame:GetScript("OnMouseUp")
 
-    Minimap:SetScript("OnMouseUp", function(self, button)
-        if not self:IsMouseOver() then return end
-        local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) and not IsMounted()
-        if lazyscan.isActive and not inCombat and button == "RightButton" and Minimap:GetScale() < 0.5 then
-            return
-        end
-        if origOnMouseUp then return origOnMouseUp(self, button) end
-    end)
+        frame:SetScript("OnMouseDown", function(self, button)
+            if not self:IsMouseOver() then return end
+            local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) and not IsMounted()
+            if lazyscan.isActive and not inCombat and button == "RightButton" and self:GetScale() < 0.5 then
+                return
+            end
+            if origDown then return origDown(self, button) end
+        end)
+
+        frame:SetScript("OnMouseUp", function(self, button)
+            if not self:IsMouseOver() then return end
+            local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) and not IsMounted()
+            if lazyscan.isActive and not inCombat and button == "RightButton" and self:GetScale() < 0.5 then
+                return
+            end
+            if origUp then return origUp(self, button) end
+        end)
+    end
+
+    hookFrame(Minimap)
+    if FarmModeMap then hookFrame(FarmModeMap) end
 end
 
 -- Hook at PLAYER_LOGIN (after all addons loaded, including ElvUI)
@@ -276,20 +287,21 @@ end
 -- MINIMAP STORAGE / RESTORE
 -- =============================================
 local function StoreMinimap()
-    local point, relativeTo, relativePoint, x, y = Minimap:GetPoint()
+    local mm = scanTarget or Minimap
+    local point, relativeTo, relativePoint, x, y = mm:GetPoint()
     minimapSettings.point = point
     minimapSettings.relativeTo = relativeTo
     minimapSettings.relativePoint = relativePoint
     minimapSettings.x = x
     minimapSettings.y = y
-    minimapSettings.alpha = Minimap:GetAlpha()
-    minimapSettings.scale = Minimap:GetScale()
+    minimapSettings.alpha = mm:GetAlpha()
+    minimapSettings.scale = mm:GetScale()
     minimapSettings.gameTooltipScale = GameTooltip:GetScale()
 
     -- Store mouse state of minimap children
     minimapSettings.childMouseState = {}
-    for i = 1, select("#", Minimap:GetChildren()) do
-        local child = select(i, Minimap:GetChildren())
+    for i = 1, select("#", mm:GetChildren()) do
+        local child = select(i, mm:GetChildren())
         if child and child.IsMouseEnabled and child:IsMouseEnabled() then
             minimapSettings.childMouseState[child] = true
         end
@@ -320,13 +332,14 @@ local function RestoreMinimap()
     isScanning = false
     hideTooltip = false
 
+    local mm = scanTarget or Minimap
     local m = minimapSettings
-    if m.alpha then Minimap:SetAlpha(m.alpha) end
-    if m.scale then Minimap:SetScale(m.scale) end
+    if m.alpha then mm:SetAlpha(m.alpha) end
+    if m.scale then mm:SetScale(m.scale) end
     if m.gameTooltipScale then GameTooltip:SetScale(m.gameTooltipScale) end
     if m.point then
-        Minimap:ClearAllPoints()
-        Minimap:SetPoint(m.point, m.relativeTo, m.relativePoint, m.x, m.y)
+        mm:ClearAllPoints()
+        mm:SetPoint(m.point, m.relativeTo, m.relativePoint, m.x, m.y)
     end
     if m.childMouseState then
         for child, was in pairs(m.childMouseState) do
@@ -342,8 +355,8 @@ local function RestoreMinimap()
         end
     end
 
-    Minimap:EnableMouse(true)
-    Minimap:EnableMouseWheel(true)
+    mm:EnableMouse(true)
+    mm:EnableMouseWheel(true)
     clickFrame:Hide()
 end
 
@@ -362,14 +375,15 @@ local function PrepareMinimap()
     isScanning = true
     hideTooltip = true
 
-    Minimap:SetAlpha(0)
-    Minimap:SetScale(0.15)
-    Minimap:EnableMouseWheel(false)
+    local mm = scanTarget or Minimap
+    mm:SetAlpha(0)
+    mm:SetScale(0.15)
+    mm:EnableMouseWheel(false)
 
     -- Disable mouse on minimap children to prevent POI tooltips
     -- Minimap itself stays mouse-enabled so tooltip appears for node detection
-    for i = 1, select("#", Minimap:GetChildren()) do
-        local child = select(i, Minimap:GetChildren())
+    for i = 1, select("#", mm:GetChildren()) do
+        local child = select(i, mm:GetChildren())
         if child and child.EnableMouse then child:EnableMouse(false) end
     end
 
@@ -389,10 +403,11 @@ local function SetMinimapLoc(xOffset, yOffset)
     PrepareMinimap()
     xOffset = xOffset or 0
     yOffset = yOffset or 0
+    local mm = scanTarget or Minimap
     local x, y = GetCursorPosition()
-    local uiScale = Minimap:GetEffectiveScale()
-    Minimap:ClearAllPoints()
-    Minimap:SetPoint("CENTER", nil, "BOTTOMLEFT", xOffset + x/uiScale, yOffset + y/uiScale)
+    local uiScale = mm:GetEffectiveScale()
+    mm:ClearAllPoints()
+    mm:SetPoint("CENTER", nil, "BOTTOMLEFT", xOffset + x/uiScale, yOffset + y/uiScale)
     minimapMoveTime = GetTime()
     GameTooltip:SetAlpha(0)
 end
@@ -512,7 +527,7 @@ local function ScanUpdate(self, elapsed)
     if trackingCheckTimer >= 60 then
         trackingCheckTimer = 0
         CheckTrackingWarning()
-        if lazyscan.saveData.settings.zoomMinimap then Minimap:SetZoom(0) end
+        if lazyscan.saveData.settings.zoomMinimap then (scanTarget or Minimap):SetZoom(0) end
     end
 
     if scanState == "WAITING" then
@@ -714,12 +729,18 @@ function lazyscan_StartScanning(silent)
         DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r No mining or herb tracking active! |Hlazyscan:stop|h|cff00ccff[Stop scan]|h|r |Hlazyscan:ignore|h|cff00ccff[Ignore]|h|r")
     end
 
+    -- Detect which minimap to scan (FarmModeMap if ElvUI Farm Mode active)
+    scanTarget = Minimap
+    if FarmModeMap and FarmModeMap.enabled then
+        scanTarget = FarmModeMap
+    end
+
     lazyscan_SwitchState("WAITING")
     mainFrame:SetScript("OnUpdate", ScanUpdate)
     lazyscan.isActive = true
     RegisterUnitEvents()
     trackingCheckTimer = 0
-    if lazyscan.saveData.settings.zoomMinimap then Minimap:SetZoom(0) end
+    if lazyscan.saveData.settings.zoomMinimap then scanTarget:SetZoom(0) end
     DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r |cff00ff00Scanning started.|r")
     return true
 end
@@ -728,6 +749,7 @@ function lazyscan_StopScanning()
     lazyscan_SwitchState("DISABLED")
     mainFrame:SetScript("OnUpdate", nil)
     lazyscan.isActive = false
+    scanTarget = nil
     UnregisterUnitEvents()
     lazyscan._ignoreTrackingWarning = nil
     lazyscan._ignoreTrackingWarning = false
