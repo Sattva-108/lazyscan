@@ -376,8 +376,12 @@ local function PrepareMinimap()
     hideTooltip = true
 
     local mm = scanTarget or Minimap
+    -- Normalize scale: target ~21px visual size regardless of minimap size
+    local targetSize = 21
+    local mmWidth = mm:GetWidth() or 140
+    local scanScale = targetSize / mmWidth
     mm:SetAlpha(0)
-    mm:SetScale(0.15)
+    mm:SetScale(scanScale)
     mm:EnableMouseWheel(false)
 
     -- Disable mouse on minimap children to prevent POI tooltips
@@ -539,7 +543,7 @@ local function ScanUpdate(self, elapsed)
 
     if scanState == "WAITING" then
         timeElapsed = timeElapsed + elapsed
-        local interval = 0.5
+        local interval = 0.00001
         local inCombat = lazyscan.saveData.settings.pauseInCombat and UnitAffectingCombat("player") and not IsMounted()
         -- Clear mouseover pause if no unit under cursor (handles UI frames where CURSOR_UPDATE doesn't fire)
         if mouseoverUnitPause and not UnitExists("mouseover") then
