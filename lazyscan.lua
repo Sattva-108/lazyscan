@@ -21,6 +21,7 @@ local hideTooltip = false
 local trackingList = {}
 local scanTarget = nil  -- Minimap or FarmModeMap, set once at scan start
 local trackingCheckTimer = 0
+local nodeBlacklist = {}  -- {nodeName = expireTime} — pause scanning for found nodes
 local mouseoverUnitPause = false
 
 local function HasActiveTracking()
@@ -475,8 +476,13 @@ local function IsMatch()
                             end
                             -- Check if this node is enabled in GUI
                             if matched and lazyscan_GUI_IsNodeEnabled(node.cat, node.en) then
-                                foundNodeName = matchedName
-                                return true
+                                -- Skip recently found nodes (blacklisted for 10 sec)
+                                if nodeBlacklist[matchedName] and nodeBlacklist[matchedName] > GetTime() then
+                                    matched = false
+                                else
+                                    foundNodeName = matchedName
+                                    return true
+                                end
                             end
                         end
                     end
@@ -525,10 +531,9 @@ end
 stateList["RESET_STATE"] = function()
     RestoreMinimap()
     if foundNode then
-        -- Node found: park, wait, then resume
+        -- Node found: continue scanning immediately (node is blacklisted for 10 sec)
         foundNode = false
-        scanState = "IDLE"
-        timeElapsed = 0
+        lazyscan_SwitchState("WAITING")
     else
         lazyscan_SwitchState("WAITING")
     end
@@ -567,11 +572,16 @@ local function ScanUpdate(self, elapsed)
         trackingCheckTimer = 0
         CheckTrackingWarning()
         if lazyscan.saveData.settings.zoomMinimap then (minimapSettings.map or Minimap):SetZoom(0) end
+        -- Clean up expired blacklist entries
+        local now = GetTime()
+        for name, expire in pairs(nodeBlacklist) do
+            if expire <= now then nodeBlacklist[name] = nil end
+        end
     end
 
     if scanState == "WAITING" then
         timeElapsed = timeElapsed + elapsed
-        local interval = 0.00001
+        local interval = 0.5
         local inCombat = lazyscan.saveData.settings.pauseInCombat and UnitAffectingCombat("player") and not IsMounted()
         -- Clear mouseover pause if no unit under cursor (handles UI frames where CURSOR_UPDATE doesn't fire)
         if mouseoverUnitPause and not UnitExists("mouseover") then
@@ -622,6 +632,7 @@ local function ScanUpdate(self, elapsed)
             if lazyscan.saveData.settings.playSound and lazyscan.saveData.settings.enableNodeSound ~= false then PlayAlertSound() end
             if FlashClientIcon then FlashClientIcon() end
             DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r Found " .. foundNodeName .. "!")
+            nodeBlacklist[foundNodeName] = GetTime() + 10  -- pause this node for 10 sec
             foundNode = true
             lazyscan_SwitchState("RESET_STATE")
         else
@@ -796,6 +807,7 @@ function lazyscan_StopScanning()
     mainFrame:SetScript("OnUpdate", nil)
     lazyscan.isActive = false
     scanTarget = nil
+    nodeBlacklist = {}
     UnregisterUnitEvents()
     lazyscan._ignoreTrackingWarning = nil
     lazyscan._ignoreTrackingWarning = false
