@@ -350,7 +350,7 @@ function lazyscan_GUI_ScanTab_Create(parent)
 
     local bt = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     bt:SetPoint("TOP", frame, "TOP", 0, y); bt:SetText("Or use WoW Key Bindings"); bt:SetTextColor(0.7, 0.7, 0.7)
-    y = y - 24
+    y = y - 12
 
     local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     btn:SetSize(160, 22); btn:SetPoint("TOP", frame, "TOP", 0, y)
@@ -432,7 +432,7 @@ function lazyscan_GUI_ScanTab_Create(parent)
     UpdateBindText()
     frame:SetScript("OnShow", function() UpdateBindText() end)
 
-    y = y - 28
+    y = y - 36
     local sh = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     sh:SetPoint("TOP", frame, "TOP", 0, y); sh:SetText("Scan Every"); sh:SetTextColor(1, 0.82, 0)
     y = y - 22
