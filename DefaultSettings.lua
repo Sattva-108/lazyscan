@@ -36,7 +36,7 @@ end
 lazyscan_SoundEffects = {
     { name = "Coin (Default)", file = "Sound\\Interface\\iMoneyDialogOpen.wav" },
     { name = "Map Ping", file = "Sound\\Interface\\MapPing.wav" },
-    { name = "Loot Coin Large", file = "Sound\\Interface\\LootCoinLarge.wav" },
+    { name = "Herb", file = "Sound\\Spells\\Tradeskills\\HerbalismSearchB.wav" },
     { name = "Magic Click", file = "Sound\\Interface\\MagicClick.wav" },
     { name = "Bonk", file = "Sound\\Spells\\Bonk3.wav" },
     { name = "Tranquility", file = "Sound\\Spells\\Tranquility.wav" },

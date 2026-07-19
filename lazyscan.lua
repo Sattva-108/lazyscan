@@ -866,16 +866,14 @@ SlashCmdList["LAZYSCAN"] = function(msg)
         lazyscan_StartScanning()
     elseif cmd == "stop" then
         lazyscan_StopScanning()
-    elseif cmd == "test" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r Testing alerts...")
-        if lazyscan.saveData.settings.flashScreen then FlashScreen() end
-        if lazyscan.saveData.settings.playSound and lazyscan.saveData.settings.enableNodeSound ~= false then PlayAlertSound() end
-    else
+    elseif cmd == "toggle" then
         if lazyscan.isActive then
             lazyscan_StopScanning()
         else
             lazyscan_StartScanning()
         end
+    else
+        lazyscan_GUI_Options_Toggle()
     end
 end
 
@@ -897,15 +895,6 @@ end
 -- =============================================
 BINDING_HEADER_LAZYSCAN = "lazyscan"
 BINDING_NAME_LAZYSCAN_TOGGLE = "Toggle Scanner"
-
-_G["SLASH_LAZYSCAN1"] = "/leye"
-SlashCmdList["LAZYSCAN"] = function(msg)
-    if lazyscan.isActive then
-        lazyscan_StopScanning()
-    else
-        lazyscan_StartScanning()
-    end
-end
 
 -- =============================================
 -- CHAT HYPERLINK HANDLER
