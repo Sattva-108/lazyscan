@@ -304,6 +304,33 @@ function lazyscan_GUI_ScanTab_Create(parent)
     frame:SetAllPoints()
     local y = -8
 
+    -- Status bar at the bottom
+    local statusBar = CreateFrame("Frame", nil, frame)
+    statusBar:SetHeight(24)
+    statusBar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 6, -14)
+    statusBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -6, -14)
+    statusBar:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    statusBar:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
+    statusBar:SetBackdropBorderColor(0.4, 0.4, 0.4, 0.8)
+    statusBar:Hide()
+
+    local statusText = statusBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    statusText:SetPoint("LEFT", statusBar, "LEFT", 8, 0)
+    statusText:SetPoint("RIGHT", statusBar, "RIGHT", -8, 0)
+    statusText:SetJustifyH("LEFT")
+    statusText:SetText("")
+    statusText:SetTextColor(0.7, 0.7, 0.7)
+
+    local function ShowStatus(text, r, g, b)
+        statusText:SetText(text)
+        statusText:SetTextColor(r, g, b)
+        statusBar:Show()
+    end
+
     local h = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     h:SetPoint("TOP", frame, "TOP", 0, y); h:SetText("Scan Settings"); h:SetTextColor(1, 0.82, 0)
     y = y - 24
@@ -397,10 +424,13 @@ function lazyscan_GUI_ScanTab_Create(parent)
         if keyPressed == "" then
             local bound = GetBindingKey("LAZYSCAN_TOGGLE")
             if bound then SetBinding(bound) end
+            ShowStatus("Keybind removed", 1, 0.5, 0)
         else
             local oldAction = GetBindingAction(keyPressed)
             if oldAction ~= "" and oldAction ~= "LAZYSCAN_TOGGLE" then
-                DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r Key was bound to " .. GetBindingText(oldAction, "BINDING_NAME_"))
+                ShowStatus("Unbound from: " .. GetBindingText(oldAction, "BINDING_NAME_") .. " | Bound: " .. GetBindingText(keyPressed, "KEY_"), 1, 0.5, 0)
+            else
+                ShowStatus("Bound: " .. GetBindingText(keyPressed, "KEY_"), 0, 1, 0)
             end
             SetBinding(keyPressed, "LAZYSCAN_TOGGLE")
         end
