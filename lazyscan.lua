@@ -185,15 +185,15 @@ local function HookMinimap()
 
         frame:SetScript("OnMouseDown", function(self, button)
             if not self:IsMouseOver() then return end
-            -- Block all clicks while minimap is under cursor for scan
-            if isScanning then return end
+            -- Block clicks on FarmHudMinimap always (it has mouse=1 from FarmHud)
+            -- Block other minimaps only during TOOLTIP_CHECK (when under cursor)
+            if self == FarmHudMinimap or scanState == "TOOLTIP_CHECK" then return end
             if origDown then return origDown(self, button) end
         end)
 
         frame:SetScript("OnMouseUp", function(self, button)
             if not self:IsMouseOver() then return end
-            -- Block all clicks while minimap is under cursor for scan
-            if isScanning then return end
+            if self == FarmHudMinimap or scanState == "TOOLTIP_CHECK" then return end
             if origUp then return origUp(self, button) end
         end)
     end
@@ -323,7 +323,10 @@ local function RestoreMinimap()
         end
     end
 
-    mm:EnableMouse(true)
+    -- Enable mouse on minimap (skip for FarmHudMinimap — it manages its own mouse)
+    if mm ~= FarmHudMinimap then
+        mm:EnableMouse(true)
+    end
     mm:EnableMouseWheel(true)
 
     -- Restore FarmModeMap dragging
@@ -334,14 +337,11 @@ local function RestoreMinimap()
 
     -- Restore FarmHudMinimap mouse, alpha, and unhook
     if mm == FarmHudMinimap then
-        -- Unhook EnableMouse first
+        -- Use original function to disable mouse (bypass our hook)
         if minimapSettings.farmHudOrigEnableMouse then
+            minimapSettings.farmHudOrigEnableMouse(FarmHudMinimap, false)
             FarmHudMinimap.EnableMouse = minimapSettings.farmHudOrigEnableMouse
             minimapSettings.farmHudOrigEnableMouse = nil
-        end
-        if minimapSettings.farmHudMouseWasEnabled ~= nil then
-            FarmHudMinimap:EnableMouse(minimapSettings.farmHudMouseWasEnabled)
-            minimapSettings.farmHudMouseWasEnabled = nil
         end
         if minimapSettings.farmHudAlpha ~= nil then
             FarmHudMinimap:SetAlpha(minimapSettings.farmHudAlpha)
@@ -403,7 +403,8 @@ local function PrepareMinimap()
             return minimapSettings.farmHudOrigEnableMouse(self, enable)
         end
 
-        FarmHudMinimap:EnableMouse(true)
+        -- Use original function to enable mouse (bypass our hook)
+        minimapSettings.farmHudOrigEnableMouse(FarmHudMinimap, true)
         FarmHudMinimap:SetAlpha(1)
         FarmHudMapCluster:SetAlpha(1)
         FarmHudMapCluster:Show()
