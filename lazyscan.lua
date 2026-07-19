@@ -54,7 +54,13 @@ end
 -- Detect GameObject under cursor (WoW 3.3.5 doesn't fire UPDATE_MOUSEOVER_UNIT for GOs)
 local function IsHoveringGameObject()
     if not GameTooltip:IsShown() then return false end
+    if GameTooltip:GetAlpha() < 0.99 then return false end
     if GetMouseFocus() ~= WorldFrame then return false end
+    local owner = GameTooltip:GetOwner()
+    local mm = scanTarget or Minimap
+    if owner == mm or owner == Minimap or owner == FarmModeMap or (FarmHudMinimap and owner == FarmHudMinimap) then
+        return false
+    end
     if GameTooltip:GetUnit() or GameTooltip:GetItem() or GameTooltip:GetSpell() then
         return false
     end
@@ -92,12 +98,16 @@ tooltipWatchdog:SetScript("OnUpdate", function()
             if overUI or isUnit or isGO then
                 GameTooltip:SetAlpha(1)
             else
+                --GameTooltip:SetBackdrop(nil)
+                GameTooltip:SetBackdrop({
+                    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+                    tile = true,
+                    tileSize = 16,
+                })
                 GameTooltip:SetAlpha(0)
                 GameTooltip:SetSize(0.01, 0.01)
             end
         end
-    elseif GameTooltip:GetAlpha() < 1 then
-        GameTooltip:SetAlpha(1)
     end
 end)
 
@@ -322,6 +332,7 @@ end
 local function RestoreMinimap()
     isScanning = false
     hideTooltip = false
+    GameTooltip:SetAlpha(1)
 
     local mm = scanTarget or Minimap
     local m = minimapSettings
