@@ -840,10 +840,12 @@ function lazyscan_GUI_NodesTab_Create(parent)
     end
 
     -- Sub-tabs: Ores / Herbs (positioned below main tabs)
-    lazyscan_GUI_Tabs_Create(frame, {
-        { key = "ores", label = "Ores", frame = subFrames.ores },
+    local subTabGroup = lazyscan_GUI_Tabs_Create(frame, {
         { key = "herbs", label = "Herbs", frame = subFrames.herbs },
+        { key = "ores", label = "Ores", frame = subFrames.ores },
     }, -5)
+
+    frame.subTabGroup = subTabGroup
 
     frame.allPills = {}
     for k, sf in pairs(subFrames) do frame.allPills[k] = sf.allPills end
@@ -918,6 +920,17 @@ function lazyscan_GUI_Options_Create()
 
     lazyscan_GUI.optionsFrame = f
     lazyscan_GUI.nodesTab = nodesTab
+
+    nodesTab:HookScript("OnShow", function(self)
+        local trackingType = lazyscan_GetActiveTrackingType and lazyscan_GetActiveTrackingType()
+        if trackingType == "ores" then
+            self.subTabGroup:SelectTab("ores")
+        elseif trackingType == "herbs" then
+            self.subTabGroup:SelectTab("herbs")
+        else
+            self.subTabGroup:SelectTab("herbs")
+        end
+    end)
 end
 
 function lazyscan_GUI_Options_Toggle()

@@ -32,7 +32,7 @@ local function HasActiveTracking()
     )
 end
 
-local function GetActiveTrackingType()
+function lazyscan_GetActiveTrackingType()
     local currentTexture = GetTrackingTexture()
     if currentTexture then
         if currentTexture:find("Earthquake") then return "ores" end
@@ -497,7 +497,7 @@ local function IsMatch()
                     end
                     if matched then
                         -- Only match nodes for active tracking type
-                        local activeTrack = GetActiveTrackingType()
+                        local activeTrack = lazyscan_GetActiveTrackingType()
                         if activeTrack and node.cat == activeTrack then
                             -- Check skill level: skip high-level nodes unless enabled
                             if not lazyscan.saveData.settings.detectHighLevelNodes then

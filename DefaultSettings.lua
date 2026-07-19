@@ -45,5 +45,4 @@ lazyscan_WarningSounds = {
     { name = "Alarm (Default)", file = "Sound\\Interface\\AlarmClockWarning3.wav" },
     { name = "Error", file = "Sound\\Interface\\Error.wav" },
     { name = "GM Warning", file = "Sound\\Interface\\GM_ChatWarning.wav" },
-    { name = "Alarm 2", file = "Sound\\Interface\\AlarmClockWarning2.wav" },
 }
