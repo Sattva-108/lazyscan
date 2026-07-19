@@ -15,6 +15,7 @@ function lazyscan_GetDefaultSettings()
         autoStartScan = true,
         zoomMinimap = true,
         detectHighLevelNodes = false,
+        scanWhileResting = false,
         trackingSound = 5,
         trackingSoundID = "Sound\\Interface\\AlarmClockWarning3.wav",
 

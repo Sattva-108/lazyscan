@@ -331,7 +331,18 @@ function lazyscan_GUI_ScanTab_Create(parent)
         GameTooltip:Show()
     end)
     highLevelCb:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    y = y - 32
+    y = y - 24
+
+    local restingCb = MakeCheckbox(frame, "Scan while resting", lazyscan_GUI_GetSetting("scanWhileResting", false), function(v) lazyscan_GUI_SetSetting("scanWhileResting", v) end)
+    restingCb:SetPoint("TOP", frame, "TOP", -80, y)
+    restingCb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Scan while resting", 1, 0.82, 0)
+        GameTooltip:AddLine("When enabled, scanning continues while resting (inside inns or cities). When disabled, scanning pauses while resting.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    restingCb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    y = y - 48
 
     local kh = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     kh:SetPoint("TOP", frame, "TOP", 0, y); kh:SetText("Keybinding"); kh:SetTextColor(1, 0.82, 0)
@@ -466,7 +477,7 @@ function lazyscan_GUI_AlertsTab_Create(parent)
     y = y - 24
 
     MakeCheckbox(frame, "Play sound", lazyscan_GUI_GetSetting("playSound", true), function(v) lazyscan_GUI_SetSetting("playSound", v) end):SetPoint("TOP", frame, "TOP", -80, y)
-    y = y - 28
+    y = y - 36
 
     local ch = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     ch:SetPoint("TOP", frame, "TOP", 0, y); ch:SetText("Flash Color"); ch:SetTextColor(1, 0.82, 0)

@@ -587,7 +587,7 @@ end
 local function ScanUpdate(self, elapsed)
     -- Skip during flight path or resting
     if UnitOnTaxi and UnitOnTaxi("player") then return end
-    if IsResting() then return end
+    if not lazyscan.saveData.settings.scanWhileResting and IsResting() then return end
 
     -- Update scan target when idle (not mid-cycle) to catch FarmHud/FarmMode activation
     if scanState == "WAITING" then
