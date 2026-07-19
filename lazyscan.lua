@@ -615,7 +615,7 @@ local function ScanUpdate(self, elapsed)
 
     if scanState == "WAITING" then
         timeElapsed = timeElapsed + elapsed
-        local interval = 0.0001
+        local interval = lazyscan.saveData.settings.scanInterval or 0.5
         local inCombat = lazyscan.saveData.settings.pauseInCombat and UnitAffectingCombat("player") and not IsMounted()
         -- Clear mouseover pause if no unit under cursor (handles UI frames where CURSOR_UPDATE doesn't fire)
         if mouseoverUnitPause and not UnitExists("mouseover") then

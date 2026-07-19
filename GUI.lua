@@ -473,7 +473,7 @@ function lazyscan_GUI_ScanTab_Create(parent)
     local scanSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
     scanSlider:SetSize(160, 16)
     scanSlider:SetPoint("TOP", frame, "TOP", 0, y - 20)
-    scanSlider:SetMinMaxValues(0.1, 5.0)
+    scanSlider:SetMinMaxValues(0.1, 1.5)
     scanSlider:SetValueStep(0.05)
 
     local scanDefault = lazyscan_GUI_GetSetting("scanInterval", 0.5)
@@ -665,12 +665,28 @@ function lazyscan_GUI_AlertsTab_Create(parent)
     if not lazyscan_GUI_GetSetting("enableTrackingSound", true) then
         tsndBtn:Disable()
     end
-    y = y - 54
+    y = y - 66
 
-    MakeCheckbox(frame, "Print Found in Chat", lazyscan_GUI_GetSetting("printFoundAlert", true), function(v) lazyscan_GUI_SetSetting("printFoundAlert", v) end):SetPoint("TOP", frame, "TOP", -80, y)
+    local printFoundCb = MakeCheckbox(frame, "Print Found Alert in Chat", lazyscan_GUI_GetSetting("printFoundAlert", true), function(v) lazyscan_GUI_SetSetting("printFoundAlert", v) end)
+    printFoundCb:SetPoint("TOP", frame, "TOP", -80, y)
+    printFoundCb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Print Found Alert in Chat", 1, 0.82, 0)
+        GameTooltip:AddLine("Prints the node name in chat when a node is found while scanning (e.g. \"Found Goldclover!\").", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    printFoundCb:SetScript("OnLeave", function() GameTooltip:Hide() end)
     y = y - 24
 
-    MakeCheckbox(frame, "Error Frame Alert", lazyscan_GUI_GetSetting("errorFrameAlert", true), function(v) lazyscan_GUI_SetSetting("errorFrameAlert", v) end):SetPoint("TOP", frame, "TOP", -80, y)
+    local errorFrameCb = MakeCheckbox(frame, "Error Frame Alert", lazyscan_GUI_GetSetting("errorFrameAlert", true), function(v) lazyscan_GUI_SetSetting("errorFrameAlert", v) end)
+    errorFrameCb:SetPoint("TOP", frame, "TOP", -80, y)
+    errorFrameCb:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Error Frame Alert", 1, 0.82, 0)
+        GameTooltip:AddLine("Shows a green message at the top of the screen when a node is found while scanning.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    errorFrameCb:SetScript("OnLeave", function() GameTooltip:Hide() end)
     y = y - 24
 
     if not lazyscan_GUI_GetSetting("playSound", true) then
