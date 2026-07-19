@@ -436,6 +436,7 @@ local function SetMinimapLoc(xOffset, yOffset)
     mm:ClearAllPoints()
     mm:SetPoint("CENTER", nil, "BOTTOMLEFT", xOffset + x/uiScale, yOffset + y/uiScale)
     minimapMoveTime = GetTime()
+    mm:SetAlpha(0)
     GameTooltip:SetAlpha(0)
 end
 
