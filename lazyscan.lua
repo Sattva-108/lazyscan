@@ -288,6 +288,9 @@ end
 -- MINIMAP STORAGE / RESTORE
 -- =============================================
 local function StoreMinimap()
+    -- Don't overwrite original settings if minimap is already modified by scan
+    if isScanning and minimapSettings.map then return end
+
     -- Use the already-detected scanTarget, don't re-detect
     local mm = scanTarget or Minimap
     minimapSettings.map = mm
@@ -808,6 +811,11 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Restore minimap if it was mid-cycle during loading screen (portal, hearthstone, instance)
+        if isScanning then
+            RestoreMinimap()
+            lazyscan_SwitchState("WAITING")
+        end
         if lazyscan.saveData and lazyscan.saveData.settings.autoStartScan and not lazyscan.isActive then
             -- Delay auto-start by 3 sec so skill data loads
             local autoTimer = 0
