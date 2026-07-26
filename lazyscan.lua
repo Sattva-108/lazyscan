@@ -521,7 +521,7 @@ local function IsMatch()
                             -- Check if this node is enabled in GUI
                             if matched and lazyscan_GUI_IsNodeEnabled(node.cat, node.en) then
                                 -- Skip recently found nodes (blacklisted for 10 sec)
-                                if nodeBlacklist[matchedName] and nodeBlacklist[matchedName] > GetTime() then
+                                if nodeBlacklist[matchedName] and nodeBlacklist[matchedName] > 0 then
                                     matched = false
                                 else
                                     foundNodeName = matchedName
@@ -649,10 +649,17 @@ local function ScanUpdate(self, elapsed)
         trackingCheckTimer = 0
         CheckTrackingWarning()
         if lazyscan.saveData.settings.zoomMinimap then (minimapSettings.map or Minimap):SetZoom(0) end
-        -- Clean up expired blacklist entries
-        local now = GetTime()
-        for name, expire in pairs(nodeBlacklist) do
-            if expire <= now then nodeBlacklist[name] = nil end
+    end
+
+    -- Decrease blacklist timers only while player is moving (counts movement seconds)
+    if GetUnitSpeed("player") > 0 then
+        for name, remainingTime in pairs(nodeBlacklist) do
+            local newTime = remainingTime - elapsed
+            if newTime <= 0 then
+                nodeBlacklist[name] = nil
+            else
+                nodeBlacklist[name] = newTime
+            end
         end
     end
 
@@ -715,7 +722,7 @@ local function ScanUpdate(self, elapsed)
             if lazyscan.saveData.settings.errorFrameAlert then
                 UIErrorsFrame:AddMessage("Found " .. foundNodeName, 0, 1, 0, 1, 3)
             end
-            nodeBlacklist[foundNodeName] = GetTime() + 10  -- pause this node for 10 sec
+            nodeBlacklist[foundNodeName] = 10  -- pause this node for 6 seconds of movement
             foundNode = true
             lazyscan_SwitchState("RESET_STATE")
         else
