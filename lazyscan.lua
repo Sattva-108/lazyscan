@@ -7,27 +7,6 @@ lazyscan.isActive = false
 local ADDON_NAME = "lazyscan"
 local scanState = "DISABLED"
 local timeElapsed = 0
-
--- DEBUG: flight path tracking
-local DBG_lastMsg = ""
-local DBG_repeatCount = 0
-local function DBG(msg, throttle)
-    if throttle and msg == DBG_lastMsg then
-        DBG_repeatCount = DBG_repeatCount + 1
-        if DBG_repeatCount <= 3 or DBG_repeatCount % 10 == 0 then
-            DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[lazyscan-debug]|r " .. tostring(msg) .. " (x" .. DBG_repeatCount .. ")")
-        end
-        return
-    end
-    if DBG_repeatCount > 3 then
-        DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[lazyscan-debug]|r ... repeated " .. DBG_repeatCount .. " times")
-    end
-    DBG_lastMsg = msg
-    DBG_repeatCount = 0
-    DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[lazyscan-debug]|r " .. tostring(msg))
-end
-local wasOnTaxi = false  -- tracks previous UnitOnTaxi state
-local wasResting = false  -- tracks previous IsResting state
 local framesElapsed = 0
 local tooltipDelay = 0
 local lastCursorX, lastCursorY = -1, -1
@@ -44,6 +23,8 @@ local scanTarget = nil  -- Minimap or FarmModeMap, set once at scan start
 local trackingCheckTimer = 0
 local nodeBlacklist = {}  -- {nodeName = expireTime} — pause scanning for found nodes
 local mouseoverUnitPause = false
+local wasOnTaxi = false
+local wasResting = false
 
 local function HasActiveTracking()
     local currentTexture = GetTrackingTexture()
@@ -309,7 +290,6 @@ end
 local function StoreMinimap()
     -- Use the already-detected scanTarget, don't re-detect
     local mm = scanTarget or Minimap
-    DBG("StoreMinimap: state=" .. scanState .. " mm=" .. (mm == Minimap and "Minimap" or mm == FarmHudMinimap and "FarmHud" or mm == FarmModeMap and "FarmMode" or "unknown"))
     minimapSettings.map = mm
     local point, relativeTo, relativePoint, x, y = mm:GetPoint()
     minimapSettings.point = point
@@ -352,11 +332,7 @@ local function StoreMinimap()
 end
 
 local function RestoreMinimap()
-    DBG("RestoreMinimap: state=" .. scanState .. " isScanning=" .. tostring(isScanning) .. " mm=" .. (scanTarget == Minimap and "Minimap" or scanTarget == FarmHudMinimap and "FarmHud" or scanTarget == FarmModeMap and "FarmMode" or "nil"))
-    if minimapSettings.map then
-        DBG("RestoreMinimap: stored map=" .. (minimapSettings.map == Minimap and "Minimap" or minimapSettings.map == FarmHudMinimap and "FarmHud" or minimapSettings.map == FarmModeMap and "FarmMode" or "unknown") .. " storedPoint=" .. tostring(minimapSettings.point))
-    else
-        DBG("RestoreMinimap: WARNING - no stored map, skipping restore!")
+    if not minimapSettings.map then
         isScanning = false
         hideTooltip = false
         GameTooltip:SetAlpha(1)
@@ -439,7 +415,6 @@ local function PrepareMinimap()
     local mm = scanTarget or Minimap
     -- Skip if already preparing the same minimap
     if isScanning and mm == minimapSettings.map then return end
-    DBG("PrepareMinimap: modifying minimap mm=" .. (mm == Minimap and "Minimap" or mm == FarmHudMinimap and "FarmHud" or mm == FarmModeMap and "FarmMode" or "unknown"))
     isScanning = true
     hideTooltip = true
     -- Normalize scale: target ~21px visual size regardless of minimap size
@@ -495,7 +470,6 @@ end
 
 local function SetMinimapLoc(xOffset, yOffset)
     PrepareMinimap()
-    DBG("SetMinimapLoc: positioning minimap under cursor", true)
     xOffset = xOffset or 0
     yOffset = yOffset or 0
     local mm = scanTarget or Minimap
@@ -568,7 +542,6 @@ local mainFrame = CreateFrame("Frame")
 local stateList = {}
 
 function lazyscan_SwitchState(newState)
-    DBG("State: " .. scanState .. " -> " .. newState, true)
     if stateList[newState] then
         scanState = newState
         stateList[newState]()
@@ -576,7 +549,6 @@ function lazyscan_SwitchState(newState)
 end
 
 stateList["DISABLED"] = function()
-    DBG("DISABLED: calling RestoreMinimap")
     RestoreMinimap()
     if GameTooltip:GetAlpha() < 1 then GameTooltip:SetAlpha(1) end
 end
@@ -595,11 +567,9 @@ end
 stateList["REPOSITION_MINIMAP"] = function()
     -- Don't store minimap if player is on taxi
     if UnitOnTaxi and UnitOnTaxi("player") then
-        DBG("REPOSITION_MINIMAP: skipping StoreMinimap, on taxi")
         lazyscan_SwitchState("WAITING")
         return
     end
-    DBG("REPOSITION_MINIMAP: storing minimap state")
     StoreMinimap()
     timeElapsed = 0
 end
@@ -622,7 +592,6 @@ end
 stateList["TOOLTIP_CHECK"] = function()
     -- Don't reposition minimap if player is on taxi
     if UnitOnTaxi and UnitOnTaxi("player") then
-        DBG("TOOLTIP_CHECK: skipping SetMinimapLoc, on taxi")
         lazyscan_SwitchState("WAITING")
         return
     end
@@ -637,39 +606,28 @@ local function ScanUpdate(self, elapsed)
     -- Track flight path state changes
     local onTaxi = UnitOnTaxi and UnitOnTaxi("player")
     if onTaxi and not wasOnTaxi then
-        DBG("FLIGHT START: was scanning state=" .. scanState .. " isScanning=" .. tostring(isScanning))
         wasOnTaxi = true
         -- If scan was mid-cycle, restore minimap immediately so it stays visible during flight
         if isScanning and scanState ~= "WAITING" and scanState ~= "IDLE" and scanState ~= "DISABLED" then
-            DBG("FLIGHT START: restoring minimap mid-flight (was in state " .. scanState .. ")")
             RestoreMinimap()
             lazyscan_SwitchState("WAITING")
         end
     elseif not onTaxi and wasOnTaxi then
-        DBG("FLIGHT END: state=" .. scanState .. " isScanning=" .. tostring(isScanning))
         wasOnTaxi = false
     end
 
     -- Track resting state changes
     local resting = IsResting()
     if resting and not wasResting then
-        DBG("RESTING START: state=" .. scanState .. " isScanning=" .. tostring(isScanning) .. " onTaxi=" .. tostring(onTaxi))
         wasResting = true
     elseif not resting and wasResting then
-        DBG("RESTING END: state=" .. scanState .. " isScanning=" .. tostring(isScanning) .. " onTaxi=" .. tostring(onTaxi))
         wasResting = false
     end
 
     -- Skip during flight path or resting
-    if onTaxi then
-        DBG("SKIP: onTaxi=true state=" .. scanState, true)
-        return
-    end
+    if onTaxi then return end
     local scanWhileResting = lazyscan.saveData.settings.scanWhileResting
-    if not scanWhileResting and resting then
-        DBG("SKIP: IsResting=true state=" .. scanState, true)
-        return
-    end
+    if not scanWhileResting and resting then return end
 
     -- Update scan target when idle (not mid-cycle) to catch FarmHud/FarmMode activation
     if scanState == "WAITING" then
@@ -850,7 +808,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
-        DBG("EVENT: PLAYER_ENTERING_WORLD isScanning=" .. tostring(isScanning) .. " state=" .. scanState)
         if lazyscan.saveData and lazyscan.saveData.settings.autoStartScan and not lazyscan.isActive then
             -- Delay auto-start by 3 sec so skill data loads
             local autoTimer = 0
@@ -866,15 +823,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end)
         end
 
-    elseif event == "PLAYER_CONTROL_GAINED" then
-        DBG("EVENT: PLAYER_CONTROL_GAINED isScanning=" .. tostring(isScanning) .. " state=" .. scanState .. " onTaxi=" .. tostring(wasOnTaxi), true)
-
-    elseif event == "PLAYER_CONTROL_LOST" then
-        DBG("EVENT: PLAYER_CONTROL_LOST isScanning=" .. tostring(isScanning) .. " state=" .. scanState .. " onTaxi=" .. tostring(wasOnTaxi), true)
-
-    elseif event == "TAXI_CLOSE" then
-        DBG("EVENT: TAXI_CLOSE isScanning=" .. tostring(isScanning) .. " state=" .. scanState .. " onTaxi=" .. tostring(wasOnTaxi), true)
-
     elseif event == "PLAYER_LOGOUT" then
         lazyscanSavedVars = lazyscan.saveData and lazyscan.saveData.settings
     end
@@ -883,9 +831,6 @@ end)
 mainFrame:RegisterEvent("ADDON_LOADED")
 mainFrame:RegisterEvent("PLAYER_LOGOUT")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-mainFrame:RegisterEvent("PLAYER_CONTROL_GAINED")
-mainFrame:RegisterEvent("PLAYER_CONTROL_LOST")
-mainFrame:RegisterEvent("TAXI_CLOSE")
 
 -- =============================================
 -- START / STOP
@@ -938,7 +883,6 @@ function lazyscan_StartScanning(silent)
 end
 
 function lazyscan_StopScanning()
-    DBG("StopScanning: state=" .. scanState .. " isScanning=" .. tostring(isScanning))
     lazyscan_SwitchState("DISABLED")
     mainFrame:SetScript("OnUpdate", nil)
     lazyscan.isActive = false
