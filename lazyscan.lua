@@ -34,9 +34,9 @@ local probeTargetSize = PROBE_SIZE_DETECT
 -- Matrix scan 3x3 (9 points covering the full minimap area)
 local RADAR_R = 25
 local radarGrid = {
-    {x=0, y=0},
-    {x=-RADAR_R, y=0}, {x=RADAR_R, y=0}, {x=0, y=-RADAR_R}, {x=0, y=RADAR_R},
-    {x=-RADAR_R, y=-RADAR_R}, {x=RADAR_R, y=-RADAR_R}, {x=-RADAR_R, y=RADAR_R}, {x=RADAR_R, y=RADAR_R},
+    {x=0, y=0},                                                -- Центр (0px)
+    {x=-14, y=0}, {x=14, y=0}, {x=0, y=-14}, {x=0, y=14},       -- Внутренний контур (14px)
+    {x=-18, y=-18}, {x=18, y=-18}, {x=-18, y=18}, {x=18, y=18}, -- Внешний контур (25px)
 }
 local radarHits = {}
 local radarIndex = 0
@@ -619,8 +619,8 @@ local function FinishRadarDetection()
 
     -- Вызов TomTom через защищенный pcall
     if lazyscan_saveTomTomWaypoint and (avgX ~= 0 or avgY ~= 0) then
-        local maxCoord = math.max(math.abs(avgX), math.abs(avgY))
-        local distRatio = (maxCoord / RADAR_R) * 0.50
+        local distPixels = math.sqrt(avgX^2 + avgY^2)
+        local distRatio = distPixels / (PROBE_SIZE_RADAR / 2.0)
         pcall(lazyscan_saveTomTomWaypoint, foundNodeName, worldAngle, distRatio)
     end
 
