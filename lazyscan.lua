@@ -5,6 +5,7 @@ lazyscan = {}
 lazyscan.isActive = false
 
 local ADDON_NAME = "lazyscan"
+local DEBUG_SCAN_METRICS = true  -- set false to silence per-scan frame/ms chat output
 local scanState = "DISABLED"
 local timeElapsed = 0
 local framesElapsed = 0
@@ -13,6 +14,11 @@ local lastCursorX, lastCursorY = -1, -1
 local foundNode = false
 local foundNodeName = ""
 local extraDelay = 0
+
+-- Per-scan cycle performance metrics (WAITING -> scan -> RESET_STATE)
+local scanStartTime = 0
+local scanFrameCount = 0
+local scanMetricsActive = false
 
 local minimapSettings = {}
 local anchoredFramesCache = nil
@@ -573,11 +579,24 @@ stateList["REPOSITION_MINIMAP"] = function()
         lazyscan_SwitchState("WAITING")
         return
     end
+    -- Start of a full scan cycle (WAITING -> REPOSITION_MINIMAP)
+    scanStartTime = GetTime()
+    scanFrameCount = 0
+    scanMetricsActive = true
     StoreMinimap()
     timeElapsed = 0
 end
 
 stateList["RESET_STATE"] = function()
+    if DEBUG_SCAN_METRICS and scanMetricsActive then
+        local durationMs = (GetTime() - scanStartTime) * 1000
+        local nodeFound = foundNode and "Yes" or "No"
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(
+            "|cff00ff00[lazyscan debug]|r Scan completed in %d frames (%.1f ms). Node found: %s",
+            scanFrameCount, durationMs, nodeFound
+        ))
+        scanMetricsActive = false
+    end
     RestoreMinimap()
     if foundNode then
         -- Node found: continue scanning immediately (node is blacklisted for 10 sec)
@@ -593,19 +612,25 @@ stateList["IDLE"] = function()
 end
 
 stateList["TOOLTIP_CHECK"] = function()
-    -- Don't reposition minimap if player is on taxi
+    -- Don't check tooltip if player is on taxi
     if UnitOnTaxi and UnitOnTaxi("player") then
+        scanMetricsActive = false
         lazyscan_SwitchState("WAITING")
         return
     end
-    tooltipDelay = 0
-    SetMinimapLoc()
+    -- Minimap already placed under cursor in REPOSITION_MINIMAP (frame 1).
+    -- Next OnUpdate (frame 2) reads the tooltip — engine needs one frame to fill it.
 end
 
 -- =============================================
 -- MAIN SCAN UPDATE
 -- =============================================
 local function ScanUpdate(self, elapsed)
+    -- Count OnUpdate frames spent in the active scan cycle
+    if scanMetricsActive and (scanState == "REPOSITION_MINIMAP" or scanState == "TOOLTIP_CHECK") then
+        scanFrameCount = scanFrameCount + 1
+    end
+
     -- Track flight path state changes
     local onTaxi = UnitOnTaxi and UnitOnTaxi("player")
     if onTaxi and not wasOnTaxi then
@@ -613,6 +638,7 @@ local function ScanUpdate(self, elapsed)
         -- If scan was mid-cycle, restore minimap immediately so it stays visible during flight
         if isScanning and scanState ~= "WAITING" and scanState ~= "IDLE" and scanState ~= "DISABLED" then
             RestoreMinimap()
+            scanMetricsActive = false  -- aborted mid-cycle; do not report partial metrics
             lazyscan_SwitchState("WAITING")
         end
     elseif not onTaxi and wasOnTaxi then
@@ -681,17 +707,9 @@ local function ScanUpdate(self, elapsed)
         end
 
     elseif scanState == "REPOSITION_MINIMAP" then
+        -- Frame 1 of 2: store settings + place minimap under cursor.
+        -- Engine fills GameTooltip hit-test only on the *next* frame.
         if GetUnitSpeed("player") ~= 0 then
-            lazyscan_SwitchState("TOOLTIP_CHECK")
-        else
-            lazyscan_SwitchState("WAITING")
-        end
-
-    elseif scanState == "TOOLTIP_CHECK" then
-        tooltipDelay = tooltipDelay + 1
-
-        if tooltipDelay == 1 then
-            -- Frame 1: position minimap under cursor
             local x, y = GetCursorPosition()
             if x == lastCursorX and y == lastCursorY then
                 SetMinimapLoc(math.random(-2, 2), math.random(-2, 2))
@@ -700,18 +718,17 @@ local function ScanUpdate(self, elapsed)
                 lastCursorX = x
                 lastCursorY = y
             end
-            return
+            lazyscan_SwitchState("TOOLTIP_CHECK")
+        else
+            -- Standing still: abort cycle without a full scan report
+            scanMetricsActive = false
+            lazyscan_SwitchState("WAITING")
         end
 
-        if tooltipDelay < 3 then
-            -- Frames 2+: wait for tooltip to populate
-            return
-        end
-
-        -- Frame 3+: check tooltip text
-        if CursorBusy() then
-            lazyscan_SwitchState("RESET_STATE")
-        elseif IsMatch() then
+    elseif scanState == "TOOLTIP_CHECK" then
+        -- Frame 2 of 2: tooltip should be ready — check once, then always reset.
+        -- No artificial tooltipDelay / framesElapsed waits (was 6 frames, now 2).
+        if not CursorBusy() and IsMatch() then
             -- Node found! Flash + sound
             if lazyscan.saveData.settings.flashScreen then FlashScreen() end
             if lazyscan.saveData.settings.playSound and lazyscan.saveData.settings.enableNodeSound ~= false then PlayAlertSound() end
@@ -722,15 +739,10 @@ local function ScanUpdate(self, elapsed)
             if lazyscan.saveData.settings.errorFrameAlert then
                 UIErrorsFrame:AddMessage("Found " .. foundNodeName, 0, 1, 0, 1, 3)
             end
-            nodeBlacklist[foundNodeName] = 10  -- pause this node for 6 seconds of movement
+            nodeBlacklist[foundNodeName] = 10  -- pause this node for 10 sec of movement
             foundNode = true
-            lazyscan_SwitchState("RESET_STATE")
-        else
-            framesElapsed = framesElapsed + 1
-            if framesElapsed >= 3 then
-                lazyscan_SwitchState("RESET_STATE")
-            end
         end
+        lazyscan_SwitchState("RESET_STATE")
 
     elseif scanState == "IDLE" then
         timeElapsed = timeElapsed + elapsed
