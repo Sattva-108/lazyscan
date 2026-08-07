@@ -26,11 +26,29 @@ local mouseoverUnitPause = false
 local wasOnTaxi = false
 local wasResting = false
 
+-- Probe size: Stage 1 detection = 4px, Stage 2 matrix scan = 100px
+local PROBE_SIZE_DETECT = 4
+local PROBE_SIZE_RADAR = 100
+local probeTargetSize = PROBE_SIZE_DETECT
+
+-- Matrix scan 3x3 (9 points covering the full minimap area)
+local RADAR_R = 25
+local radarGrid = {
+    {x=0, y=0},
+    {x=-RADAR_R, y=0}, {x=RADAR_R, y=0}, {x=0, y=-RADAR_R}, {x=0, y=RADAR_R},
+    {x=-RADAR_R, y=-RADAR_R}, {x=RADAR_R, y=-RADAR_R}, {x=-RADAR_R, y=RADAR_R}, {x=RADAR_R, y=RADAR_R},
+}
+local radarHits = {}
+local radarIndex = 0
+local foundDirection = nil
+local radarNodeName = ""
+local radarStartFacing = 0
+
 local function HasActiveTracking()
     local currentTexture = GetTrackingTexture()
     return currentTexture and (
-        currentTexture:find("Earthquake") or      -- Find Minerals
-        currentTexture:find("Flower_02")          -- Find Herbs
+            currentTexture:find("Earthquake") or      -- Find Minerals
+                    currentTexture:find("Flower_02")          -- Find Herbs
     )
 end
 
@@ -100,7 +118,6 @@ tooltipWatchdog:SetScript("OnUpdate", function()
             if overUI or isUnit or isGO then
                 GameTooltip:SetAlpha(1)
             else
-                --GameTooltip:SetBackdrop(nil)
                 GameTooltip:SetBackdrop({
                     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
                     tile = true,
@@ -148,7 +165,7 @@ end)
 
 local function FlashScreen()
     local c = lazyscan.saveData and lazyscan.saveData.settings
-        and lazyscan.saveData.settings.flashColor or { r = 0, g = 1, b = 0, a = 0.5 }
+            and lazyscan.saveData.settings.flashColor or { r = 0, g = 1, b = 0, a = 0.5 }
     flashTexture:SetVertexColor(c.r, c.g, c.b, c.a or 0.6)
     flashFrame:Show()
     isFlashing = true
@@ -221,14 +238,14 @@ local function HookMinimap()
         frame:SetScript("OnMouseDown", function(self, button)
             if not self:IsMouseOver() then return end
             -- Block clicks on FarmHudMinimap always (it has mouse=1 from FarmHud)
-            -- Block other minimaps only during TOOLTIP_CHECK (when under cursor)
-            if self == FarmHudMinimap or scanState == "TOOLTIP_CHECK" then return end
+            -- Block other minimaps during probe (TOOLTIP_CHECK / RADAR_SWEEP)
+            if self == FarmHudMinimap or scanState == "TOOLTIP_CHECK" or scanState == "RADAR_SWEEP" then return end
             if origDown then return origDown(self, button) end
         end)
 
         frame:SetScript("OnMouseUp", function(self, button)
             if not self:IsMouseOver() then return end
-            if self == FarmHudMinimap or scanState == "TOOLTIP_CHECK" then return end
+            if self == FarmHudMinimap or scanState == "TOOLTIP_CHECK" or scanState == "RADAR_SWEEP" then return end
             if origUp then return origUp(self, button) end
         end)
     end
@@ -401,7 +418,6 @@ local function RestoreMinimap()
             minimapSettings.farmHudClusterWasShown = nil
         end
     end
-
 end
 
 -- =============================================
@@ -414,18 +430,21 @@ end
 -- =============================================
 -- MINIMAP PROBE (prepare + position under cursor)
 -- =============================================
+local function ApplyProbeScale()
+    local mm = scanTarget or Minimap
+    local mmWidth = mm:GetWidth() or 140
+    mm:SetScale((probeTargetSize or PROBE_SIZE_DETECT) / mmWidth)
+end
+
 local function PrepareMinimap()
     local mm = scanTarget or Minimap
-    -- Skip if already preparing the same minimap
+    -- Skip if already preparing the same minimap (scale can still change via ApplyProbeScale)
     if isScanning and mm == minimapSettings.map then return end
     isScanning = true
     hideTooltip = true
-    -- Normalize scale: target ~21px visual size regardless of minimap size
-    local targetSize = 21
-    local mmWidth = mm:GetWidth() or 140
-    local scanScale = targetSize / mmWidth
+    -- Normalize scale: Stage 1 = 4px (single-point detect), Stage 2 = 100px (radar)
     mm:SetAlpha(0)
-    mm:SetScale(scanScale)
+    ApplyProbeScale()
     mm:EnableMouseWheel(false)
 
     -- Disable dragging on FarmModeMap during scan
@@ -537,6 +556,179 @@ local function IsMatch()
     return false
 end
 
+-- Confirm the same node is still under the probe (used by radar directions)
+local function TooltipHasNode(nodeName)
+    if not nodeName or nodeName == "" then return false end
+    local nameLower = string.lower(nodeName)
+    for i = 1, GameTooltip:NumLines() do
+        local lineObj = _G["GameTooltipTextLeft" .. i]
+        if lineObj then
+            local lineText = lineObj:GetText()
+            if lineText and string.find(string.lower(lineText), nameLower, 1, true) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function FinishRadarDetection()
+    local avgX, avgY = 0, 0
+    if #radarHits > 0 then
+        for _, hit in ipairs(radarHits) do
+            avgX = avgX + hit.x
+            avgY = avgY + hit.y
+        end
+        avgX = avgX / #radarHits
+        avgY = avgY / #radarHits
+    end
+
+    -- avgX > 0 = Восток, avgY > 0 = Север
+    local relAngle = math.atan2(avgY, avgX) -- 0 = Восток, Pi/2 = Север, -Pi/2 = Юг, Pi = Запад
+
+    -- Коррекция вращения миникарты (если включено вращение)
+    local worldAngle = relAngle
+    if GetCVar("rotateMinimap") == "1" then
+        worldAngle = relAngle + radarStartFacing
+    end
+
+    -- Определение направления текстом (по мировому углу)
+    local a = worldAngle % (2 * math.pi)
+    if a < 0 then a = a + 2 * math.pi end
+    local dirIdx = math.floor((math.deg(a) + 22.5) / 45) % 8
+    local dirNames = {"East", "North-East", "North", "North-West", "West", "South-West", "South", "South-East"}
+    local direction = (#radarHits == 0 or (avgX == 0 and avgY == 0)) and "Center / Nearby" or dirNames[dirIdx + 1]
+
+    foundDirection = direction
+
+    -- Алерты
+    if lazyscan.saveData.settings.flashScreen then FlashScreen() end
+    if lazyscan.saveData.settings.playSound and lazyscan.saveData.settings.enableNodeSound ~= false then PlayAlertSound() end
+    if FlashClientIcon then FlashClientIcon() end
+    if lazyscan.saveData.settings.printFoundAlert then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r Found " .. foundNodeName .. "! Direction: " .. direction)
+    end
+    if lazyscan.saveData.settings.errorFrameAlert then
+        UIErrorsFrame:AddMessage("Found " .. foundNodeName .. " (" .. direction .. ")", 0, 1, 0, 1, 3)
+    end
+
+    -- ВАЖНО: Сначала обновляем состояние сканера, чтобы избежать бесконечного цикла!
+    nodeBlacklist[foundNodeName] = 3
+    foundNode = true
+    probeTargetSize = PROBE_SIZE_DETECT
+
+    -- Вызов TomTom через защищенный pcall
+    if lazyscan_saveTomTomWaypoint and (avgX ~= 0 or avgY ~= 0) then
+        local maxCoord = math.max(math.abs(avgX), math.abs(avgY))
+        local distRatio = (maxCoord / RADAR_R) * 0.50
+        pcall(lazyscan_saveTomTomWaypoint, foundNodeName, worldAngle, distRatio)
+    end
+
+    lazyscan_SwitchState("RESET_STATE")
+end
+
+-- =============================================
+-- TOMTOM WAYPOINT
+-- =============================================
+function lazyscan_saveTomTomWaypoint(nodeName, worldAngle, distRatio)
+    if not TomTom or not TomTom.AddZWaypoint then return end
+
+    SetMapToCurrentZone()
+    local c, z = GetCurrentMapContinent(), GetCurrentMapZone()
+    local px, py = GetPlayerMapPosition("player")
+
+    if not px or not py or px <= 0 or py <= 0 then return end
+
+    -- Радиус миникарты на 0 зуме = ~220 метров
+    local nodeDistanceYards = (distRatio or 1.0) * 220.0
+
+    -- Вычисляем размеры зоны через Astrolabe 0.4
+    local zoneWidthYards, zoneHeightYards = 5500, 3600
+    local Astrolabe = DongleStub and DongleStub("Astrolabe-0.4", true)
+    if Astrolabe and Astrolabe.ComputeDistance then
+        local _, w, h = Astrolabe:ComputeDistance(c, z, 0, 0, c, z, 1, 1)
+        if w and h and w > 0 and h > 0 then
+            zoneWidthYards = math.abs(w)
+            zoneHeightYards = math.abs(h)
+        end
+    end
+
+    local offsetXPercent = (math.cos(worldAngle) * nodeDistanceYards) / zoneWidthYards * 100
+    local offsetYPercent = (math.sin(worldAngle) * nodeDistanceYards) / zoneHeightYards * 100
+
+    local nodeX = (px * 100) + offsetXPercent
+    local nodeY = (py * 100) - offsetYPercent
+
+    nodeX = math.max(0, math.min(100, nodeX))
+    nodeY = math.max(0, math.min(100, nodeY))
+
+    TomTom:AddZWaypoint(c, z, nodeX, nodeY, "Found: " .. nodeName, false, true, true, nil, true, true)
+
+    -- Сравнение с ручным кликом (Debug)
+    local manual = lazyscan.lastManualClick
+    if manual and (GetTime() - manual.time < 30) and nodeName ~= "[MANUAL CLICK]" then
+        local angleDiff = math.deg(worldAngle - manual.angle)
+        angleDiff = (angleDiff + 180) % 360 - 180
+        local ratioDiff = distRatio - manual.distRatio
+
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffd100========== ACCURACY DEBUG REPORT ==========|r")
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("Angle Error: |cff%s%.1f°|r", math.abs(angleDiff) < 5 and "00ff00" or "ff2020", angleDiff))
+        DEFAULT_CHAT_FRAME:AddMessage(string.format("Dist Ratio Error: |cff%s%.2f|r (Manual: %.2f vs Scan: %.2f)", math.abs(ratioDiff) < 0.1 and "00ff00" or "ff2020", ratioDiff, manual.distRatio, distRatio))
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffd100===========================================|r")
+    end
+end
+
+-- =============================================
+-- DEBUG TOOL: MANUAL CLICK COMPARISON
+-- =============================================
+lazyscan.lastManualClick = nil
+
+local debugMinimapFrame = CreateFrame("Frame", nil, Minimap)
+debugMinimapFrame:RegisterEvent("PLAYER_LOGIN")
+debugMinimapFrame:SetScript("OnEvent", function()
+    Minimap:HookScript("OnMouseDown", function(self, button)
+        if IsShiftKeyDown() and button == "LeftButton" then
+            local uiScale = UIParent:GetEffectiveScale()
+            local rawX, rawY = GetCursorPosition()
+            local cursorX, cursorY = rawX / uiScale, rawY / uiScale
+
+            local mmX, mmY = Minimap:GetCenter()
+            local dx = cursorX - mmX
+            local dy = cursorY - mmY
+
+            local mmScale = Minimap:GetEffectiveScale() / uiScale
+            local radius = (Minimap:GetWidth() * mmScale) / 2
+            local distRatio = math.sqrt(dx^2 + dy^2) / radius
+
+            local relAngle = math.atan2(dy, dx)
+            local worldAngle = relAngle
+            if GetCVar("rotateMinimap") == "1" then
+                worldAngle = relAngle + (GetPlayerFacing() or 0)
+            end
+
+            local clickPX, clickPY = GetPlayerMapPosition("player")
+
+            lazyscan.lastManualClick = {
+                angle = worldAngle,
+                distRatio = distRatio,
+                dx = dx,
+                dy = dy,
+                time = GetTime(),
+                px = clickPX,
+                py = clickPY,
+            }
+
+            lazyscan_saveTomTomWaypoint("[MANUAL CLICK]", worldAngle, distRatio)
+
+            local deg = math.floor(math.deg(worldAngle) % 360)
+            DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                    "|cff00ff00[lazyscan debug]|r TRUE CLICK CAPTURED! Angle: %d° | DistRatio: %.2f",
+                    deg, distRatio
+            ))
+        end
+    end)
+end)
+
 -- =============================================
 -- STATE MACHINE
 -- =============================================
@@ -559,12 +751,17 @@ end
 stateList["WAITING"] = function()
     foundNode = false
     foundNodeName = ""
+    radarNodeName = ""
+    foundDirection = nil
+    radarIndex = 0
+    probeTargetSize = PROBE_SIZE_DETECT
     timeElapsed = 0
     if extraDelay ~= 0 then
         timeElapsed = -extraDelay
         extraDelay = 0
     end
     framesElapsed = 0
+    radarHits = {}
 end
 
 stateList["REPOSITION_MINIMAP"] = function()
@@ -598,8 +795,37 @@ stateList["TOOLTIP_CHECK"] = function()
         lazyscan_SwitchState("WAITING")
         return
     end
+    -- Stage 1: tiny probe under cursor (instant presence check)
+    probeTargetSize = PROBE_SIZE_DETECT
     tooltipDelay = 0
     SetMinimapLoc()
+end
+
+-- Stage 2: matrix scan 3x3 with confirmation step
+stateList["RADAR_SWEEP"] = function()
+    if UnitOnTaxi and UnitOnTaxi("player") then
+        lazyscan_SwitchState("WAITING")
+        return
+    end
+    radarStartFacing = GetPlayerFacing() or 0
+    radarNodeName = foundNodeName
+    foundDirection = nil
+    radarIndex = 1
+    probeTargetSize = PROBE_SIZE_RADAR
+    ApplyProbeScale()
+    local pt = radarGrid[radarIndex]
+    SetMinimapLoc(pt.x, pt.y)
+    scanState = "RADAR_CONFIRM"
+end
+
+stateList["RADAR_CONFIRM"] = function()
+    if UnitOnTaxi and UnitOnTaxi("player") then
+        lazyscan_SwitchState("WAITING")
+        return
+    end
+    -- After placing minimap, wait one frame then check tooltip
+    radarIndex = radarIndex + 1
+    scanState = "RADAR_SWEEP"
 end
 
 -- =============================================
@@ -712,25 +938,49 @@ local function ScanUpdate(self, elapsed)
         if CursorBusy() then
             lazyscan_SwitchState("RESET_STATE")
         elseif IsMatch() then
-            -- Node found! Flash + sound
-            if lazyscan.saveData.settings.flashScreen then FlashScreen() end
-            if lazyscan.saveData.settings.playSound and lazyscan.saveData.settings.enableNodeSound ~= false then PlayAlertSound() end
-            if FlashClientIcon then FlashClientIcon() end
-            if lazyscan.saveData.settings.printFoundAlert then
-                DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan:|r Found " .. foundNodeName .. "!")
-            end
-            if lazyscan.saveData.settings.errorFrameAlert then
-                UIErrorsFrame:AddMessage("Found " .. foundNodeName, 0, 1, 0, 1, 3)
-            end
-            nodeBlacklist[foundNodeName] = 10  -- pause this node for 6 seconds of movement
-            foundNode = true
-            lazyscan_SwitchState("RESET_STATE")
+            -- Stage 1 hit: enter radar to resolve compass direction
+            lazyscan_SwitchState("RADAR_SWEEP")
         else
             framesElapsed = framesElapsed + 1
             if framesElapsed >= 3 then
                 lazyscan_SwitchState("RESET_STATE")
             end
         end
+
+    elseif scanState == "RADAR_SWEEP" then
+        if CursorBusy() then
+            probeTargetSize = PROBE_SIZE_DETECT
+            lazyscan_SwitchState("RESET_STATE")
+            return
+        end
+
+        -- Если сетка пройдена полностью — завершаем скан
+        if radarIndex > #radarGrid then
+            FinishRadarDetection()
+            return
+        end
+
+        -- Устанавливаем миникарту с новым смещением
+        local pt = radarGrid[radarIndex]
+        SetMinimapLoc(pt.x, pt.y)
+        scanState = "RADAR_CONFIRM"
+
+    elseif scanState == "RADAR_CONFIRM" then
+        if CursorBusy() then
+            probeTargetSize = PROBE_SIZE_DETECT
+            lazyscan_SwitchState("RESET_STATE")
+            return
+        end
+
+        -- Ждем 1 кадр и считываем результат тултипа
+        if TooltipHasNode(radarNodeName) then
+            local pt = radarGrid[radarIndex]
+            -- Инвертируем: если сдвинули карту вправо (+x), то проверяем западную часть миникарты (-x)
+            table.insert(radarHits, {x = -pt.x, y = -pt.y})
+        end
+
+        radarIndex = radarIndex + 1
+        scanState = "RADAR_SWEEP"
 
     elseif scanState == "IDLE" then
         timeElapsed = timeElapsed + elapsed
@@ -760,7 +1010,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
 
             trackingList = lazyscan_BuildTrackingList()
-            
+
             -- Initialize GUI
             if lazyscan_GUI_Init then
                 lazyscan_GUI_Init()
@@ -813,7 +1063,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                     DBI:Register("lazyscan", minimapIcon, lazyscan.saveData.settings)
                 end
             end
-            
+
             DEFAULT_CHAT_FRAME:AddMessage("|cff00ff00lazyscan|r v1.0 loaded! Type |cff00ccff/lazyscan|r to toggle.")
         end
 
