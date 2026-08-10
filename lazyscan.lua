@@ -621,7 +621,7 @@ local function FinishRadarDetection()
     if lazyscan_saveTomTomWaypoint and (avgX ~= 0 or avgY ~= 0) then
         local distPixels = math.sqrt(avgX^2 + avgY^2)
         local distRatio = distPixels / (PROBE_SIZE_RADAR / 2.0)
-        pcall(lazyscan_saveTomTomWaypoint, foundNodeName, worldAngle, distRatio)
+        pcall(lazyscan_saveTomTomWaypoint, foundNodeName, worldAngle, distRatio, true)
     end
 
     lazyscan_SwitchState("RESET_STATE")
@@ -630,7 +630,30 @@ end
 -- =============================================
 -- TOMTOM WAYPOINT
 -- =============================================
-function lazyscan_saveTomTomWaypoint(nodeName, worldAngle, distRatio)
+local lazyscanTomTomWaypoint = nil
+local lazyscanTomTomWaypointExpires = nil
+
+local function lazyscan_clearTomTomWaypoint()
+    if lazyscanTomTomWaypoint and TomTom and TomTom.RemoveWaypoint then
+        pcall(TomTom.RemoveWaypoint, TomTom, lazyscanTomTomWaypoint)
+    end
+    lazyscanTomTomWaypoint = nil
+    lazyscanTomTomWaypointExpires = nil
+end
+
+local tomtomWaypointTimer = CreateFrame("Frame")
+tomtomWaypointTimer:SetScript("OnUpdate", function()
+    if lazyscanTomTomWaypointExpires and GetTime() >= lazyscanTomTomWaypointExpires then
+        lazyscan_clearTomTomWaypoint()
+    end
+end)
+
+local function lazyscan_IsSelfLootMessage(message)
+    local pattern = string.gsub(LOOT_ITEM_SELF or "", "%%s", ".+")
+    return pattern ~= "" and string.match(message or "", "^" .. pattern .. "$")
+end
+
+function lazyscan_saveTomTomWaypoint(nodeName, worldAngle, distRatio, autoClear)
     if not TomTom or not TomTom.AddZWaypoint then return end
 
     SetMapToCurrentZone()
@@ -662,7 +685,12 @@ function lazyscan_saveTomTomWaypoint(nodeName, worldAngle, distRatio)
     nodeX = math.max(0, math.min(100, nodeX))
     nodeY = math.max(0, math.min(100, nodeY))
 
-    TomTom:AddZWaypoint(c, z, nodeX, nodeY, "Found: " .. nodeName, false, true, true, nil, true, true)
+    if autoClear then lazyscan_clearTomTomWaypoint() end
+    local ok, waypoint = pcall(TomTom.AddZWaypoint, TomTom, c, z, nodeX, nodeY, "Found: " .. nodeName, false, true, true, nil, true, true)
+    if ok and waypoint and autoClear then
+        lazyscanTomTomWaypoint = waypoint
+        lazyscanTomTomWaypointExpires = GetTime() + 10
+    end
 
     -- Сравнение с ручным кликом (Debug)
     local manual = lazyscan.lastManualClick
@@ -995,7 +1023,11 @@ end
 -- EVENTS
 -- =============================================
 mainFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" then
+    if event == "CHAT_MSG_LOOT" then
+        if lazyscanTomTomWaypoint and lazyscan_IsSelfLootMessage(...) then
+            lazyscan_clearTomTomWaypoint()
+        end
+    elseif event == "ADDON_LOADED" then
         local addonName = ...
         if addonName == ADDON_NAME then
             if not lazyscanSavedVars then
@@ -1096,6 +1128,7 @@ end)
 mainFrame:RegisterEvent("ADDON_LOADED")
 mainFrame:RegisterEvent("PLAYER_LOGOUT")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+mainFrame:RegisterEvent("CHAT_MSG_LOOT")
 
 -- =============================================
 -- START / STOP
