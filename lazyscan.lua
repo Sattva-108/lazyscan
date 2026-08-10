@@ -22,6 +22,7 @@ local trackingList = {}
 local scanTarget = nil  -- Minimap or FarmModeMap, set once at scan start
 local trackingCheckTimer = 0
 local nodeBlacklist = {}  -- {nodeName = expireTime} — pause scanning for found nodes
+local lazyscanLastFoundNodeName = nil
 local mouseoverUnitPause = false
 local wasOnTaxi = false
 local wasResting = false
@@ -613,7 +614,8 @@ local function FinishRadarDetection()
     end
 
     -- ВАЖНО: Сначала обновляем состояние сканера, чтобы избежать бесконечного цикла!
-    nodeBlacklist[foundNodeName] = 3
+    nodeBlacklist[foundNodeName] = 10
+    lazyscanLastFoundNodeName = foundNodeName
     foundNode = true
     probeTargetSize = PROBE_SIZE_DETECT
 
@@ -632,13 +634,18 @@ end
 -- =============================================
 local lazyscanTomTomWaypoint = nil
 local lazyscanTomTomWaypointExpires = nil
+local lazyscanTomTomNodeName = nil
 
-local function lazyscan_clearTomTomWaypoint()
+local function lazyscan_clearTomTomWaypoint(clearNodeBlacklist)
     if lazyscanTomTomWaypoint and TomTom and TomTom.RemoveWaypoint then
         pcall(TomTom.RemoveWaypoint, TomTom, lazyscanTomTomWaypoint)
     end
+    if clearNodeBlacklist and lazyscanTomTomNodeName then
+        nodeBlacklist[lazyscanTomTomNodeName] = nil
+    end
     lazyscanTomTomWaypoint = nil
     lazyscanTomTomWaypointExpires = nil
+    lazyscanTomTomNodeName = nil
 end
 
 local tomtomWaypointTimer = CreateFrame("Frame")
@@ -690,6 +697,7 @@ function lazyscan_saveTomTomWaypoint(nodeName, worldAngle, distRatio, autoClear)
     if ok and waypoint and autoClear then
         lazyscanTomTomWaypoint = waypoint
         lazyscanTomTomWaypointExpires = GetTime() + 10
+        lazyscanTomTomNodeName = nodeName
     end
 
     -- Сравнение с ручным кликом (Debug)
@@ -911,6 +919,9 @@ local function ScanUpdate(self, elapsed)
             local newTime = remainingTime - elapsed
             if newTime <= 0 then
                 nodeBlacklist[name] = nil
+                if lazyscanLastFoundNodeName == name then
+                    lazyscanLastFoundNodeName = nil
+                end
             else
                 nodeBlacklist[name] = newTime
             end
@@ -1024,8 +1035,14 @@ end
 -- =============================================
 mainFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "CHAT_MSG_LOOT" then
-        if lazyscanTomTomWaypoint and lazyscan_IsSelfLootMessage(...) then
-            lazyscan_clearTomTomWaypoint()
+        if lazyscan_IsSelfLootMessage(...) then
+            if lazyscanLastFoundNodeName then
+                nodeBlacklist[lazyscanLastFoundNodeName] = nil
+                lazyscanLastFoundNodeName = nil
+            end
+            if lazyscanTomTomWaypoint then
+                lazyscan_clearTomTomWaypoint(true)
+            end
         end
     elseif event == "ADDON_LOADED" then
         local addonName = ...
