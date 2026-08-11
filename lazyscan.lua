@@ -184,12 +184,10 @@ local function PlayAlertSound()
 end
 
 -- =============================================
--- MINIMAP MOUSE HOOKS (block right-click during scan)
+-- MINIMAP MOUSE HOOKS (block click events during active probe)
 -- =============================================
 
-local hookedMinimap = false
 local mouselookActive = false
-local minimapMoveTime = 0
 
 -- OnUpdate frame to detect button state (bypasses frame event capture)
 local mouseReleaseFrame = CreateFrame("Frame")
@@ -225,38 +223,53 @@ mouseReleaseFrame:SetScript("OnUpdate", function()
     end
 end)
 
-local function HookMinimap()
-    if hookedMinimap then return end
-    hookedMinimap = true
+local function HookFrameMouse(frame)
+    if not frame or frame._lazyscanHooked then return end
+    frame._lazyscanHooked = true
 
-    local function hookFrame(frame)
-        if not frame or frame._lazyscanHooked then return end
-        frame._lazyscanHooked = true
+    local realSetScript = frame.SetScript
+    local origDown = frame:GetScript("OnMouseDown")
+    local origUp = frame:GetScript("OnMouseUp")
 
-        local origDown = frame:GetScript("OnMouseDown")
-        local origUp = frame:GetScript("OnMouseUp")
-
-        frame:SetScript("OnMouseDown", function(self, button)
-            if not self:IsMouseOver() then return end
-            -- Block clicks on FarmHudMinimap always (it has mouse=1 from FarmHud)
-            -- Block other minimaps during probe (TOOLTIP_CHECK / RADAR_SWEEP)
-            if self == FarmHudMinimap or scanState == "TOOLTIP_CHECK" or scanState == "RADAR_SWEEP" then return end
-            if origDown then return origDown(self, button) end
-        end)
-
-        frame:SetScript("OnMouseUp", function(self, button)
-            if not self:IsMouseOver() then return end
-            if self == FarmHudMinimap or scanState == "TOOLTIP_CHECK" or scanState == "RADAR_SWEEP" then return end
-            if origUp then return origUp(self, button) end
-        end)
+    local function myMouseDown(self, button, ...)
+        if isScanning or self == FarmHudMinimap then
+            return -- Полностью блокируем клик во время сканирования
+        end
+        if origDown then return origDown(self, button, ...) end
     end
 
-    hookFrame(Minimap)
-    if FarmModeMap then hookFrame(FarmModeMap) end
-    if FarmHudMinimap then hookFrame(FarmHudMinimap) end
+    local function myMouseUp(self, button, ...)
+        if isScanning or self == FarmHudMinimap then
+            return -- Полностью блокируем клик во время сканирования
+        end
+        if origUp then return origUp(self, button, ...) end
+    end
+
+    -- Накладываем наши обработчики
+    realSetScript(frame, "OnMouseDown", myMouseDown)
+    realSetScript(frame, "OnMouseUp", myMouseUp)
+
+    -- Перехватываем будущие вызовы SetScript от других аддонов (в т.ч. Leatrix Plus)
+    frame.SetScript = function(self, scriptType, handler, ...)
+        if scriptType == "OnMouseDown" then
+            origDown = handler
+            realSetScript(self, "OnMouseDown", myMouseDown)
+        elseif scriptType == "OnMouseUp" then
+            origUp = handler
+            realSetScript(self, "OnMouseUp", myMouseUp)
+        else
+            realSetScript(self, scriptType, handler, ...)
+        end
+    end
 end
 
--- Hook at PLAYER_LOGIN (after all addons loaded, including ElvUI)
+local function HookMinimap()
+    HookFrameMouse(Minimap)
+    if FarmModeMap then HookFrameMouse(FarmModeMap) end
+    if FarmHudMinimap then HookFrameMouse(FarmHudMinimap) end
+end
+
+-- Hook at PLAYER_LOGIN (after all addons loaded)
 local hookFrame = CreateFrame("Frame")
 local rehookTimer = 0
 local rehookDone = false
@@ -265,14 +278,12 @@ hookFrame:SetScript("OnEvent", function(self, event)
     self:UnregisterEvent("PLAYER_LOGIN")
     HookMinimap()
 end)
--- Re-hook after 3 sec so Leatrix saves OUR hook as "original"
 hookFrame:SetScript("OnUpdate", function(self, elapsed)
     if rehookDone then return end
     rehookTimer = rehookTimer + elapsed
     if rehookTimer >= 3 then
         rehookDone = true
         self:SetScript("OnUpdate", nil)
-        hookedMinimap = false
         HookMinimap()
     end
 end)
