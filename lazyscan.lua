@@ -22,6 +22,7 @@ local trackingList = {}
 local scanTarget = nil  -- Minimap or FarmModeMap, set once at scan start
 local trackingCheckTimer = 0
 local nodeBlacklist = {}  -- {nodeName = expireTime} — pause scanning for found nodes
+local lazyscanLastFoundNodeName = nil
 local mouseoverUnitPause = false
 local wasOnTaxi = false
 local wasResting = false
@@ -605,6 +606,11 @@ end
 -- =============================================
 -- MAIN SCAN UPDATE
 -- =============================================
+local function lazyscan_IsSelfLootMessage(message)
+    local pattern = string.gsub(LOOT_ITEM_SELF or "", "%%s", ".+")
+    return pattern ~= "" and string.match(message or "", "^" .. pattern .. "$")
+end
+
 local function ScanUpdate(self, elapsed)
     -- Track flight path state changes
     local onTaxi = UnitOnTaxi and UnitOnTaxi("player")
@@ -657,6 +663,9 @@ local function ScanUpdate(self, elapsed)
             local newTime = remainingTime - elapsed
             if newTime <= 0 then
                 nodeBlacklist[name] = nil
+                if lazyscanLastFoundNodeName == name then
+                    lazyscanLastFoundNodeName = nil
+                end
             else
                 nodeBlacklist[name] = newTime
             end
@@ -722,7 +731,8 @@ local function ScanUpdate(self, elapsed)
             if lazyscan.saveData.settings.errorFrameAlert then
                 UIErrorsFrame:AddMessage("Found " .. foundNodeName, 0, 1, 0, 1, 3)
             end
-            nodeBlacklist[foundNodeName] = 10  -- pause this node for 6 seconds of movement
+            nodeBlacklist[foundNodeName] = 10  -- pause this node for 10 seconds of movement
+            lazyscanLastFoundNodeName = foundNodeName
             foundNode = true
             lazyscan_SwitchState("RESET_STATE")
         else
@@ -745,7 +755,14 @@ end
 -- EVENTS
 -- =============================================
 mainFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" then
+    if event == "CHAT_MSG_LOOT" then
+        if lazyscan_IsSelfLootMessage(...) then
+            if lazyscanLastFoundNodeName then
+                nodeBlacklist[lazyscanLastFoundNodeName] = nil
+                lazyscanLastFoundNodeName = nil
+            end
+        end
+    elseif event == "ADDON_LOADED" then
         local addonName = ...
         if addonName == ADDON_NAME then
             if not lazyscanSavedVars then
@@ -846,6 +863,7 @@ end)
 mainFrame:RegisterEvent("ADDON_LOADED")
 mainFrame:RegisterEvent("PLAYER_LOGOUT")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+mainFrame:RegisterEvent("CHAT_MSG_LOOT")
 
 -- =============================================
 -- START / STOP
